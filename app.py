@@ -50,22 +50,11 @@ def analizza_autore(autore_string):
     return parti[-1], " ".join(parti[:-1])
 
 def cerca_dati_online(isbn_code):
-    # Strategia 1: Google Books con Open Access URL standard
-    url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn_code}"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'})
-        with urllib.request.urlopen(req, timeout=6) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            if "items" in data:
-                return estrai_volume_info(data["items"][0]["volumeInfo"])
-    except:
-        pass
-
-    # Strategia 2: Alternativa di riserva tramite Open Library se Google fa i capricci
+    # Usiamo direttamente Open Library che fornisce le COPERTINE in modo libero e senza blocchi
     url_ol = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn_code}&format=json&jscmd=data"
     try:
         req = urllib.request.Request(url_ol, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=6) as response:
+        with urllib.request.urlopen(req, timeout=8) as response:
             data = json.loads(response.read().decode('utf-8'))
             chiave = f"ISBN:{isbn_code}"
             if chiave in data:
@@ -76,50 +65,57 @@ def cerca_dati_online(isbn_code):
                 cognome, nome = analizza_autore(autore_string)
                 pagine = str(b_info.get("number_of_pages", "N.D."))
                 data_pub = b_info.get("publish_date", "N.D.")
-                recensione = "Dati recuperati da Open Library. Trama non disponibile."
-                copertina = b_info.get("cover", {}).get("large", COPERTINA_DEFAULT).replace("http://", "https://")
+                recensione = "Libro inserito automaticamente tramite ISBN."
+                
+                # Prende la copertina ad alta risoluzione da Open Library
+                copertina = COPERTINA_DEFAULT
+                if "cover" in b_info:
+                    copertina = b_info["cover"].get("large", b_info["cover"].get("medium", COPERTINA_DEFAULT))
+                    if copertina.startswith("http://"):
+                        copertina = copertina.replace("http://", "https://")
+                return titolo, cognome, nome, pagine, data_pub, copertina, recensione
+    except:
+        pass
+        
+    # Tentativo di riserva 2: Google Books con un indirizzo alternativo e pulito
+    url_gb = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn_code}"
+    try:
+        req = urllib.request.Request(url_gb, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        with urllib.request.urlopen(req, timeout=6) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if "items" in data:
+                v_info = data["items"][0]["volumeInfo"]
+                titolo = v_info.get("title", "Titolo Sconosciuto")
+                autore_completo = ", ".join(v_info.get("authors", ["Autore Sconosciuto"]))
+                cognome, nome = analizza_autore(autore_completo)
+                pagine = str(v_info.get("pageCount", "N.D."))
+                data_pub = v_info.get("publishedDate", "N.D.")
+                recensione = v_info.get("description", "Inserito da ISBN.")
+                copertina = COPERTINA_DEFAULT
+                if "imageLinks" in v_info:
+                    copertina = v_info["imageLinks"].get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
                 return titolo, cognome, nome, pagine, data_pub, copertina, recensione
     except:
         pass
     return None
 
-def estrai_volume_info(volume_info):
-    titolo = volume_info.get("title", "Titolo Sconosciuto")
-    autore_completo = ", ".join(volume_info.get("authors", ["Autore Sconosciuto"]))
-    cognome, nome = analizza_autore(autore_completo)
-    pagine = str(volume_info.get("pageCount", "N.D."))
-    data_pub = volume_info.get("publishedDate", "N.D.")
-    recensione = volume_info.get("description", "Nessuna recensione o trama disponibile per questo libro.")
-    
-    copertina = COPERTINA_DEFAULT
-    if "imageLinks" in volume_info:
-        links = volume_info["imageLinks"]
-        copertina = links.get("thumbnail", links.get("smallThumbnail", COPERTINA_DEFAULT))
-        if copertina.startswith("http://"):
-            copertina = copertina.replace("http://", "https://")
-    return titolo, cognome, nome, pagine, data_pub, copertina, recensione
-
 def scarica_dati_da_titolo(titolo, cognome):
     query = f"intitle:{titolo} inauthor:{cognome}"
     url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(query)}&maxResults=1"
-    recensione_def = "Nessuna recensione o trama disponibile."
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=6) as response:
             data = json.loads(response.read().decode('utf-8'))
             if "items" in data:
                 v_info = data["items"][0]["volumeInfo"]
                 copertina = COPERTINA_DEFAULT
                 if "imageLinks" in v_info:
-                    links = v_info["imageLinks"]
-                    copertina = links.get("thumbnail", links.get("smallThumbnail", COPERTINA_DEFAULT))
-                    if copertina.startswith("http://"):
-                        copertina = copertina.replace("http://", "https://")
-                recensione = v_info.get("description", recensione_def)
+                    copertina = v_info["imageLinks"].get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
+                recensione = v_info.get("description", "Nessuna trama.")
                 return copertina, recensione
     except:
         pass
-    return COPERTINA_DEFAULT, recensione_def
+    return COPERTINA_DEFAULT, "Nessuna trama disponibile."
 
 def converti_file_in_base64(file_caricato):
     if file_caricato is not None:
@@ -135,7 +131,7 @@ st.subheader("📥 Inserimento Nuovi Libri")
 tab1, tab2 = st.tabs(["⚡ Via ISBN Rapido", "✍️ Manuale Completo"])
 
 with tab1:
-    st.markdown("Incolla l'ISBN: l'app cercherà i dati e la copertina in automatico.")
+    st.markdown("Incolla l'ISBN del libro per cercarlo automaticamente nei database liberi.")
     isbn_input = st.text_input("Incolla l'ISBN e premi Invio", key="ins_isbn")
     if isbn_input:
         isbn_pulito = isbn_input.replace("-", "").replace(" ", "").strip()
@@ -143,7 +139,7 @@ with tab1:
         if cursor.fetchone():
             st.warning("Questo libro è già presente nel catalogo!")
         else:
-            with st.spinner("Ricerca nei database internazionali..."):
+            with st.spinner("Ricerca automatica della copertina..."):
                 dati = cerca_dati_online(isbn_pulito)
                 if dati:
                     titolo, cognome, nome, pagine, data_pub, copertina, recensione = dati
@@ -155,18 +151,18 @@ with tab1:
                     st.success(f"🎉 Aggiunto con successo: {titolo}")
                     st.rerun()
                 else:
-                    st.error("ISBN non trovato o errore temporaneo di connessione. Usa l'inserimento Manuale.")
+                    st.error("Nessun riscontro automatico. Inserisci titolo e autore nella scheda 'Manuale Completo' per scaricare la foto dal titolo!")
 
 with tab2:
-    st.markdown("Inserisci i dati del libro. Puoi scattare o caricare una foto, oppure lasciare vuoto per cercarla online dal titolo.")
+    st.markdown("Inserisci i dati del libro. Se non hai la foto, ci penserà l'app a cercarla su internet partendo dal Titolo.")
     ins_titolo = st.text_input("Titolo del Libro", key="man_tit")
     ins_cognome = st.text_input("Cognome Autore", key="man_cog")
     ins_nome = st.text_input("Nome Autore", key="man_nom")
     ins_isbn_man = st.text_input("Codice ISBN (Facoltativo)", key="man_isbn")
     ins_pagine_man = st.text_input("Numero di Pagine (Facoltativo)", value="N.D.", key="man_pag")
     
-    file_copertina = st.file_uploader("🖼️ Sfoglia o scatta una foto per la Copertina", type=["jpg", "jpeg", "png"], key="man_file_cop")
-    ins_recensione_man = st.text_area("Recensione o Trama del Libro (Lascia vuoto per ricerca automatica)", key="man_rec")
+    file_copertina = st.file_uploader("🖼️ Carica o scatta una foto (Opzionale)", type=["jpg", "jpeg", "png"], key="man_file_cop")
+    ins_recensione_man = st.text_area("Trama o Note personali", key="man_rec")
         
     btn_salva = st.button("💾 Salva Libro nel Catalogo")
     if btn_salva:
