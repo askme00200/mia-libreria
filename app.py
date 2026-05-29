@@ -39,7 +39,6 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Copertina grigia predefinita di bell'aspetto se non c'è una foto
 COPERTINA_DEFAULT = "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=150"
 
 def analizza_autore(autore_string):
@@ -51,45 +50,55 @@ def analizza_autore(autore_string):
     return parti[-1], " ".join(parti[:-1])
 
 def cerca_dati_online(isbn_code):
-    url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn_code}&langRestrict=it&maxResults=1"
+    url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn_code}"
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        response = urllib.request.urlopen(req, timeout=5)
-        data = json.loads(response.read().decode())
-        if "items" in data:
-            volume_info = data["items"][0]["volumeInfo"]
-            titolo = volume_info.get("title", "Titolo Sconosciuto")
-            autore_completo = ", ".join(volume_info.get("authors", ["Autore Sconosciuto"]))
-            cognome, nome = analizza_autore(autore_completo)
-            pagine = str(volume_info.get("pageCount", "N.D."))
-            data_pub = volume_info.get("publishedDate", "N.D.")
-            recensione = volume_info.get("description", "Nessuna recensione o trama disponibile per questo libro.")
-            copertina = COPERTINA_DEFAULT
-            if "imageLinks" in volume_info:
-                copertina = volume_info["imageLinks"].get("thumbnail", copertina).replace("http://", "https://")
-            return titolo, cognome, nome, pagine, data_pub, copertina, recensione
-    except:
+        # Usiamo un'intestazione fissa per simulare una richiesta standard da browser
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if "items" in data:
+                volume_info = data["items"][0]["volumeInfo"]
+                titolo = volume_info.get("title", "Titolo Sconosciuto")
+                autore_completo = ", ".join(volume_info.get("authors", ["Autore Sconosciuto"]))
+                cognome, nome = analizza_autore(autore_completo)
+                pagine = str(volume_info.get("pageCount", "N.D."))
+                data_pub = volume_info.get("publishedDate", "N.D.")
+                recensione = volume_info.get("description", "Nessuna recensione o trama disponibile per questo libro.")
+                
+                copertina = COPERTINA_DEFAULT
+                if "imageLinks" in volume_info:
+                    links = volume_info["imageLinks"]
+                    copertina = links.get("thumbnail", links.get("smallThumbnail", COPERTINA_DEFAULT))
+                    # Forza HTTPS per evitare blocchi del browser su internet
+                    if copertina.startswith("http://"):
+                        copertina = copertina.replace("http://", "https://")
+                return titolo, cognome, nome, pagine, data_pub, copertina, recensione
+    except Exception as e:
         pass
     return None
 
 def scarica_dati_da_titolo(titolo, cognome):
-    query = f"intitle:{titolo} +inauthor:{cognome}"
-    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(query)}&langRestrict=it&maxResults=1"
+    query = f"intitle:{titolo} inauthor:{cognome}"
+    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(query)}&maxResults=1"
     recensione_def = "Nessuna recensione o trama disponibile."
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        response = urllib.request.urlopen(req, timeout=4)
-        data = json.loads(response.read().decode())
-        if "items" in data:
-            v_info = data["items"][0]["volumeInfo"]
-            copertina = v_info.get("imageLinks", {}).get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
-            recensione = v_info.get("description", recensione_def)
-            return copertina, recensione
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if "items" in data:
+                v_info = data["items"][0]["volumeInfo"]
+                copertina = COPERTINA_DEFAULT
+                if "imageLinks" in v_info:
+                    links = v_info["imageLinks"]
+                    copertina = links.get("thumbnail", links.get("smallThumbnail", COPERTINA_DEFAULT))
+                    if copertina.startswith("http://"):
+                        copertina = copertina.replace("http://", "https://")
+                recensione = v_info.get("description", recensione_def)
+                return copertina, recensione
     except:
         pass
     return COPERTINA_DEFAULT, recensione_def
 
-# Converte il file caricato in una stringa di testo salvabile nel database
 def converti_file_in_base64(file_caricato):
     if file_caricato is not None:
         file_bytes = file_caricato.read()
@@ -124,7 +133,7 @@ with tab1:
                     st.success(f"🎉 Aggiunto con recensione: {titolo}")
                     st.rerun()
                 else:
-                    st.error("ISBN non trovato online. Usa l'inserimento Manuale.")
+                    st.error("ISBN non trovato online o errore di connessione. Usa l'inserimento Manuale.")
 
 with tab2:
     st.markdown("Inserisci i dati del libro. Puoi caricare una foto dal tuo dispositivo o lasciar fare alla ricerca automatica.")
@@ -134,7 +143,6 @@ with tab2:
     ins_isbn_man = st.text_input("Codice ISBN (Facoltativo)", key="man_isbn")
     ins_pagine_man = st.text_input("Numero di Pagine (Facoltativo)", value="N.D.", key="man_pag")
     
-    # NUOVO SPAZIO ADEGUATO PER IL CARICAMENTO FILE DELLA FOTO
     file_copertina = st.file_uploader("🖼️ Sfoglia o scatta una foto per la Copertina", type=["jpg", "jpeg", "png"], key="man_file_cop")
     ins_recensione_man = st.text_area("Recensione o Trama del Libro (Lascia vuoto per ricerca automatica)", key="man_rec")
         
@@ -147,7 +155,6 @@ with tab2:
                 copertina_finale = converti_file_in_base64(file_copertina)
                 recensione_finale = ins_recensione_man.strip()
                 
-                # Se non ha caricato un file, proviamo a cercare online
                 if not copertina_finale or not recensione_finale:
                     cop_online, rec_online = scarica_dati_da_titolo(ins_titolo, ins_cognome)
                     if not copertina_finale: copertina_finale = cop_online
@@ -192,7 +199,6 @@ for row in libri_tutti:
     
     libri_filtrati.append((db_id, filename, t, cog_str, nom_str, ib, pag, cop_str, rec_str, scaf_str))
 
-# --- VISUALIZZAZIONE RISULTATI ---
 if libri_filtrati:
     st.write(f"Libri trovati: {len(libri_filtrati)}")
     for libro in libri_filtrati:
@@ -219,7 +225,6 @@ if libri_filtrati:
                     conn.commit()
                     st.rerun()
             with col_mod2:
-                # SPAZIO NELLA RICERCA PER CAMBIARE O SCARICARE LA FOTO REALE
                 file_mod_cop = st.file_uploader(f"🔄 Cambia/Scarica Foto per questa scheda", type=["jpg", "jpeg", "png"], key=f"file_cop_{db_id}")
                 if file_mod_cop is not None:
                     nuova_cop_b64 = converti_file_in_base64(file_mod_cop)
