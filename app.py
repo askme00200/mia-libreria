@@ -159,34 +159,28 @@ with tab1:
             st.error("Codice ISBN non valido.")
 
 with tab2:
-    st.markdown("✍️ *Digita titolo e cognome autore (premi Invio dopo aver scritto per attivare la ricerca).*")
-    ins_titolo = st.text_input("Titolo del Libro", key="manual_t")
-    ins_cognome = st.text_input("Cognome Autore", key="manual_c")
-    ins_nome = st.text_input("Nome Autore (Opzionale)", key="manual_n")
+    st.markdown("✍️ *Compila i campi qui sotto e premi il grande pulsante dorato per salvare.*")
+    ins_titolo = st.text_input("Titolo del Libro", key="man_t")
+    ins_cognome = st.text_input("Cognome Autore", key="man_c")
+    ins_nome = st.text_input("Nome Autore (Opzionale)", key="man_n")
     
-    # Se l'utente ha inserito almeno Titolo e Cognome, l'anteprima si genera da sola in tempo reale
-    if ins_titolo and ins_cognome:
-        cop_online, rec_online = scarica_dati_da_titolo(ins_titolo, ins_cognome)
-        
-        st.markdown("### 🔎 Anteprima Automaticamente Trovata:")
-        col_ant1, col_ant2 = st.columns([1, 4])
-        with col_ant1:
-            st.image(cop_online, width=110)
-        with col_ant2:
-            st.markdown(f"**Titolo proposto:** {ins_titolo}  \n**Autore proposto:** {ins_cognome} {ins_nome}")
-            st.caption(f"*Estratto trama:* {rec_online[:250]}...")
-        
-        btn_salva = st.button("🌟 CONFERMA E SALVA QUESTO LIBRO ORA", key="btn_save_manual")
-        if btn_salva:
-            cursor.execute('''
-                INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', ("Manuale", ins_titolo, ins_cognome.strip(), ins_nome.strip(), "N.D.", "N.D.", "N.D.", cop_online, rec_online, "Non assegnato"))
-            conn.commit()
-            salva_backup_permanente()
-            st.balloons()
-            st.success("🎉 Libro registrato con successo!")
-            st.rerun()
+    btn_salva = st.button("🌟 SALVA QUESTO LIBRO ORA", key="btn_save_manual_definitive")
+    
+    if btn_salva:
+        if ins_titolo and ins_cognome:
+            with st.spinner("Ricerca copertina e salvataggio in corso..."):
+                cop_online, rec_online = scarica_dati_da_titolo(ins_titolo, ins_cognome)
+                cursor.execute('''
+                    INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', ("Manuale", ins_titolo.strip(), ins_cognome.strip(), ins_nome.strip(), "N.D.", "N.D.", "N.D.", cop_online, rec_online, "Non assegnato"))
+                conn.commit()
+                salva_backup_permanente()
+                st.balloons()
+                st.success(f"🎉 Successo! '{ins_titolo}' è stato registrato nel catalogo!")
+                st.rerun()
+        else:
+            st.error("Per favore, inserisci almeno il Titolo e il Cognome dell'autore prima di salvare!")
 
 # --- SEZIONE RICERCA COMPLETA ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
