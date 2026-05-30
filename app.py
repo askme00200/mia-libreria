@@ -4,6 +4,7 @@ import urllib.request
 import json
 import base64
 import os
+import re
 
 # --- CONFIGURAZIONE GRAFICA COLORATA E VIVACE ---
 st.set_page_config(page_title="La Mia Libreria", layout="wide")
@@ -14,22 +15,16 @@ st.markdown("""
     h3 { color: #2E7D32 !important; font-family: 'Georgia', serif; margin-top: 25px; font-weight: bold; }
     label { color: #4A2724 !important; font-weight: bold !important; font-size: 16px !important; }
     .stTextInput input, .stTextArea textarea { background-color: #FFFFFF !important; color: #2C1A18 !important; border: 1.8px solid #D35400 !important; border-radius: 8px !important; }
-    
-    /* PULSANTE DI SALVATAGGIO: Giallo Zafferano */
     div.stButton > button:first-child { background-color: #F39C12; color: #FFFFFF; border-radius: 10px; border: none; font-weight: bold; height: 48px; width: 100%; font-size: 18px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
     div.stButton > button:first-child:hover { background-color: #E67E22; color: #FFFFFF; }
-    
     .stTabs [data-baseweb="tab"] { color: #7F8C8D !important; font-size: 16px !important; font-weight: bold !important; }
     .stTabs [data-baseweb="tab"][aria-selected="true"] { color: #E67E22 !important; border-bottom-color: #E67E22 !important; border-bottom-width: 3px !important; }
-    
-    /* TESSERA DEL LIBRO */
     .libro-card { background-color: #FFFFFF; padding: 24px; border-radius: 14px; border-left: 7px solid #E67E22; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.06); }
     .libro-titolo { color: #1A0F0E; font-family: 'Georgia', serif; font-size: 24px; font-weight: bold; margin-bottom: 8px; }
     .libro-autore { color: #8E3A2F; font-size: 18px; font-style: italic; margin-bottom: 14px; font-weight: 600; }
     .libro-info { font-size: 15px; margin-bottom: 8px; color: #555555; }
     .badge-scaffale { background-color: #E67E22; color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold; }
     .libro-recensione { background-color: #F9F7F1; padding: 14px; border-radius: 8px; border-top: 1px dashed #BDC3C7; margin-top: 12px; font-size: 15px; color: #4F4F4F; line-height: 1.6; }
-    
     .divisore { border-top: 2px dashed #BDC3C7; margin: 30px 0; }
     </style>
 """, unsafe_allow_html=True)
@@ -140,25 +135,30 @@ st.subheader("📥 Inserimento Nuovi Libri")
 tab1, tab2 = st.tabs(["⚡ Via ISBN Rapido", "✍️ Manuale Completo"])
 
 with tab1:
-    isbn_input = st.text_input("Incolla l'ISBN del libro e premi Invio", key="ins_isbn")
+    isbn_input = st.text_input("Incolla o Scansiona l'ISBN del libro e premi Invio", key="ins_isbn")
     if isbn_input:
-        isbn_pulito = isbn_input.replace("-", "").replace(" ", "").strip()
-        cursor.execute("SELECT id, titolo FROM libri WHERE isbn = ?", (isbn_pulito,))
-        if cursor.fetchone():
-            st.warning("Questo libro è già presente nel tuo catalogo!")
+        # SUPER FILTRO: tiene SOLO i numeri del codice, pulendo scritte e spazi dell'iPhone
+        isbn_pulito = re.sub(r'\D', '', isbn_input).strip()
+        
+        if len(isbn_pulito) >= 10:  # Controlla che sia rimasto un ISBN valido
+            cursor.execute("SELECT id, titolo FROM libri WHERE isbn = ?", (isbn_pulito,))
+            if cursor.fetchone():
+                st.warning("Questo libro è già presente nel tuo catalogo!")
+            else:
+                with st.spinner("Ricerca nei database..."):
+                    dati = cerca_dati_online(isbn_pulito)
+                    if dati:
+                        titolo, cognome, nome, pagine, data_pub, copertina, recensione = dati
+                        cursor.execute('''
+                            INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', ("ISBN", titolo, cognome, nome, isbn_pulito, pagine, data_pub, copertina, recensione, "Non assegnato"))
+                        conn.commit()
+                        salva_backup_permanente()
+                        st.success(f"🎉 Splendido! Aggiunto: {titolo}")
+                        st.rerun()
         else:
-            with st.spinner("Ricerca nei database..."):
-                dati = cerca_dati_online(isbn_pulito)
-                if dati:
-                    titolo, cognome, nome, pagine, data_pub, copertina, recensione = dati
-                    cursor.execute('''
-                        INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', ("ISBN", titolo, cognome, nome, isbn_pulito, pagine, data_pub, copertina, recensione, "Non assegnato"))
-                    conn.commit()
-                    salva_backup_permanente()
-                    st.success(f"🎉 Splendido! Aggiunto: {titolo}")
-                    st.rerun()
+            st.error("Il codice scansionato non sembra contenere un numero ISBN valido. Riprova!")
 
 with tab2:
     ins_titolo = st.text_input("Titolo del Libro")
@@ -178,7 +178,7 @@ with tab2:
             st.success("🎉 Libro registrato con successo!")
             st.rerun()
 
-# --- SEZIONE RICERCA COMPLETA E REINSERITA ---
+# --- SEZIONE RICERCA COMPLETA ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
 st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
 
@@ -199,8 +199,6 @@ if libri_tutti:
     contatore = 0
     for row in libri_tutti:
         db_id, filename, t, cog, nom, ib, pag, cop, rec, scaf = row
-        
-        # Filtri di ricerca incrociati
         if cerca_titolo and cerca_titolo.lower() not in t.lower(): continue
         if cerca_cognome and cerca_cognome.lower() not in (cog if cog else "").lower(): continue
         if cerca_scaffale and cerca_scaffale.lower() not in (scaf if scaf else "").lower(): continue
@@ -208,8 +206,7 @@ if libri_tutti:
         
         contatore += 1
         col1, col2 = st.columns([1, 5])
-        with col1: 
-            st.image(cop if cop else COPERTINA_DEFAULT, width=115)
+        with col1: st.image(cop if cop else COPERTINA_DEFAULT, width=115)
         with col2:
             st.markdown(f"""
             <div class="libro-card">
@@ -221,16 +218,13 @@ if libri_tutti:
             </div>
             """, unsafe_allow_html=True)
             
-            # Possibilità di modificare al volo lo scaffale direttamente dalla ricerca
             nuovo_scaf = st.text_input(f"Modifica Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
             if nuovo_scaf != scaf:
                 cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
                 conn.commit()
                 salva_backup_permanente()
                 st.rerun()
-                
     if contatore == 0:
         st.info("Nessun libro corrisponde ai filtri inseriti.")
 else:
-    st.info("Il catalogo è ancora vuoto. Inserisci il tuo primo libro qua sopra!")
-    
+    st.info("Il catalogo è ancora vuoto.")
