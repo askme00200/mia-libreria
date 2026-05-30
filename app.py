@@ -244,4 +244,41 @@ with col_c3:
 cerca_recensione = st.text_input("💬 Cerca parole nella Trama o Recensione", key="c_rec")
 
 cursor.execute("SELECT id, filename, titolo, cognome_autore, nome_autore, isbn, pagine, copertina, recensione, scaffale FROM libri ORDER BY id DESC")
-libri_t
+libri_tutti = cursor.fetchall()
+
+if libri_tutti:
+    contatore = 0
+    for row in libri_tutti:
+        db_id, filename, t, cog, nom, ib, pag, cop, rec, scaf = row
+        
+        if cerca_titolo and cerca_titolo.lower() not in t.lower(): continue
+        if cerca_cognome and cerca_cognome.lower() not in (cog if cog else "").lower(): continue
+        if cerca_scaffale and cerca_scaffale.lower() not in (scaf if scaf else "").lower(): continue
+        if cerca_recensione and cerca_recensione.lower() not in (rec if rec else "").lower(): continue
+        
+        contatore += 1
+        col1, col2 = st.columns([1, 5])
+        with col1: 
+            st.image(cop if cop else COPERTINA_DEFAULT, width=115)
+        with col2:
+            st.markdown(f"""
+            <div class="libro-card">
+                <div class="libro-titolo">{t}</div>
+                <div class="libro-autore">✍️ {cog}, {nom}</div>
+                <div class="libro-info">📖 Pagine: {pag} | 🔢 ISBN: {ib}</div>
+                <div class="libro-info">📍 Posizione: <span class="badge-scaffale">Scaffale {scaf}</span></div>
+                <div class="libro-recensione">💬 <strong>Trama:</strong><br>{rec}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            nuovo_scaf = st.text_input(f"Modifica Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
+            if nuovo_scaf != scaf:
+                cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
+                conn.commit()
+                salva_backup_permanente()
+                st.rerun()
+                
+    if contatore == 0:
+        st.info("Nessun libro corrisponde ai filtri inseriti.")
+else:
+    st.info("Il catalogo è ancora vuoto. Inserisci il tuo primo libro qua sopra!")
