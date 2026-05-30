@@ -159,36 +159,34 @@ with tab1:
             st.error("Codice ISBN non valido.")
 
 with tab2:
-    st.markdown("✍️ *Inserisci i dati principali per cercare la copertina ed aggiungerlo al volo.*")
+    st.markdown("✍️ *Digita titolo e cognome autore (premi Invio dopo aver scritto per attivare la ricerca).*")
     ins_titolo = st.text_input("Titolo del Libro", key="manual_t")
     ins_cognome = st.text_input("Cognome Autore", key="manual_c")
     ins_nome = st.text_input("Nome Autore (Opzionale)", key="manual_n")
     
-    btn_anteprima = st.button("🔎 CERCA COPERTINA E PREPARATI A SALVARE", key="btn_ant_manual")
-    
-    if ins_titolo and ins_cognome and btn_anteprima:
-        with st.spinner("Ricerca informazioni e copertina su Internet..."):
-            cop_online, rec_online = scarica_dati_da_titolo(ins_titolo, ins_cognome)
-            
-            st.markdown("### 🔎 Anteprima Trovata:")
-            col_ant1, col_ant2 = st.columns([1, 4])
-            with col_ant1:
-                st.image(cop_online, width=100)
-            with col_ant2:
-                st.markdown(f"**Titolo:** {ins_titolo}  \n**Autore:** {ins_cognome} {ins_nome}")
-                st.caption(f"*Trama:* {rec_online[:200]}...")
-            
-            btn_salva = st.button("🌟 CONFERMA E SALVA IL LIBRO ORA", key="btn_save_manual")
-            if btn_salva:
-                cursor.execute('''
-                    INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', ("Manuale", ins_titolo, ins_cognome.strip(), ins_nome.strip(), "N.D.", "N.D.", "N.D.", cop_online, rec_online, "Non assegnato"))
-                conn.commit()
-                salva_backup_permanente()
-                st.balloons()
-                st.success("🎉 Libro registrato con successo!")
-                st.rerun()
+    # Se l'utente ha inserito almeno Titolo e Cognome, l'anteprima si genera da sola in tempo reale
+    if ins_titolo and ins_cognome:
+        cop_online, rec_online = scarica_dati_da_titolo(ins_titolo, ins_cognome)
+        
+        st.markdown("### 🔎 Anteprima Automaticamente Trovata:")
+        col_ant1, col_ant2 = st.columns([1, 4])
+        with col_ant1:
+            st.image(cop_online, width=110)
+        with col_ant2:
+            st.markdown(f"**Titolo proposto:** {ins_titolo}  \n**Autore proposto:** {ins_cognome} {ins_nome}")
+            st.caption(f"*Estratto trama:* {rec_online[:250]}...")
+        
+        btn_salva = st.button("🌟 CONFERMA E SALVA QUESTO LIBRO ORA", key="btn_save_manual")
+        if btn_salva:
+            cursor.execute('''
+                INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', ("Manuale", ins_titolo, ins_cognome.strip(), ins_nome.strip(), "N.D.", "N.D.", "N.D.", cop_online, rec_online, "Non assegnato"))
+            conn.commit()
+            salva_backup_permanente()
+            st.balloons()
+            st.success("🎉 Libro registrato con successo!")
+            st.rerun()
 
 # --- SEZIONE RICERCA COMPLETA ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
