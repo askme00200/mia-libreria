@@ -103,7 +103,9 @@ def cerca_dati_online(isbn_code):
     return None
 
 def scarica_dati_da_titolo(titolo, cognome):
-    query = f"intitle:{titolo} inauthor:{cognome}"
+    query = f"intitle:{titolo}"
+    if cognome:
+        query += f" inauthor:{cognome}"
     url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(query)}&maxResults=1"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -113,122 +115,4 @@ def scarica_dati_da_titolo(titolo, cognome):
                 v_info = data["items"][0]["volumeInfo"]
                 copertina = COPERTINA_DEFAULT
                 if "imageLinks" in v_info:
-                    copertina = v_info["imageLinks"].get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
-                return copertina, v_info.get("description", "Nessuna trama disponibile.")
-    except:
-        pass
-    return COPERTINA_DEFAULT, "Nessuna trama disponibile."
-
-st.title("📚 La Mia Libreria Personale")
-
-# Menu laterale di esportazione
-cursor.execute("SELECT filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale FROM libri")
-libri_export = cursor.fetchall()
-if libri_export:
-    csv_data = "Titolo;Autore;ISBN;Pagine;Scaffale\n"
-    for l in libri_export:
-        csv_data += f"{l[1]};{l[2]} {l[3]};{l[4]};{l[5]};{l[9]}\n"
-    st.sidebar.markdown("### 🛡️ Sicurezza")
-    st.sidebar.download_button("📥 Scarica Excel su PC", data=csv_data.encode('utf-8'), file_name="i_miei_libri.csv", mime="text/csv")
-
-st.subheader("📥 Inserimento Nuovi Libri")
-tab1, tab2 = st.tabs(["⚡ Via ISBN Rapido", "📚 Inserimento in Libreria"])
-
-with tab1:
-    isbn_input = st.text_input("Incolla o Scansiona l'ISBN del libro e premi Invio", key="ins_isbn")
-    if isbn_input:
-        isbn_pulito = re.sub(r'\D', '', isbn_input).strip()
-        if len(isbn_pulito) >= 10:
-            cursor.execute("SELECT id, titolo FROM libri WHERE isbn = ?", (isbn_pulito,))
-            if cursor.fetchone():
-                st.warning("Questo libro è già presente nel tuo catalogo!")
-            else:
-                with st.spinner("Ricerca nei database..."):
-                    dati = cerca_dati_online(isbn_pulito)
-                    if dati:
-                        titolo, cognome, nome, pagine, data_pub, copertina, recensione = dati
-                        cursor.execute('''
-                            INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', ("ISBN", titolo, cognome, nome, isbn_pulito, pagine, data_pub, copertina, recensione, "Non assegnato"))
-                        conn.commit()
-                        salva_backup_permanente()
-                        st.success(f"🎉 Splendido! Aggiunto: {titolo}")
-                        st.rerun()
-        else:
-            st.error("Codice ISBN non valido.")
-
-with tab2:
-    st.markdown("✍️ *Compila i campi qui sotto e premi il grande pulsante dorato per salvare.*")
-    ins_titolo = st.text_input("Titolo del Libro", key="man_t")
-    ins_cognome = st.text_input("Cognome Autore", key="man_c")
-    ins_nome = st.text_input("Nome Autore (Opzionale)", key="man_n")
-    
-    btn_salva = st.button("🌟 SALVA QUESTO LIBRO ORA", key="btn_save_manual_definitive")
-    
-    if btn_salva:
-        if ins_titolo and ins_cognome:
-            with st.spinner("Ricerca copertina e salvataggio in corso..."):
-                cop_online, rec_online = scarica_dati_da_titolo(ins_titolo, ins_cognome)
-                cursor.execute('''
-                    INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', ("Manuale", ins_titolo.strip(), ins_cognome.strip(), ins_nome.strip(), "N.D.", "N.D.", "N.D.", cop_online, rec_online, "Non assegnato"))
-                conn.commit()
-                salva_backup_permanente()
-                st.balloons()
-                st.success(f"🎉 Successo! '{ins_titolo}' è stato registrato nel catalogo!")
-                st.rerun()
-        else:
-            st.error("Per favore, inserisci almeno il Titolo e il Cognome dell'autore prima di salvare!")
-
-# --- SEZIONE RICERCA COMPLETA ---
-st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
-st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
-
-col_c1, col_c2, col_c3 = st.columns(3)
-with col_c1:
-    cerca_titolo = st.text_input("🔍 Cerca per Titolo", key="c_tit")
-with col_c2:
-    cerca_cognome = st.text_input("👤 Cerca per Cognome Autore", key="c_cog")
-with col_c3:
-    cerca_scaffale = st.text_input("🗄️ Cerca per Scaffale", key="c_scaf")
-
-cerca_recensione = st.text_input("💬 Cerca parole nella Trama o Recensione", key="c_rec")
-
-cursor.execute("SELECT id, filename, titolo, cognome_autore, nome_autore, isbn, pagine, copertina, recensione, scaffale FROM libri ORDER BY id DESC")
-libri_tutti = cursor.fetchall()
-
-if libri_tutti:
-    contatore = 0
-    for row in libri_tutti:
-        db_id, filename, t, cog, nom, ib, pag, cop, rec, scaf = row
-        if cerca_titolo and cerca_titolo.lower() not in t.lower(): continue
-        if cerca_cognome and cerca_cognome.lower() not in (cog if cog else "").lower(): continue
-        if cerca_scaffale and cerca_scaffale.lower() not in (scaf if scaf else "").lower(): continue
-        if cerca_recensione and cerca_recensione.lower() not in (rec if rec else "").lower(): continue
-        
-        contatore += 1
-        col1, col2 = st.columns([1, 5])
-        with col1: st.image(cop if cop else COPERTINA_DEFAULT, width=115)
-        with col2:
-            st.markdown(f"""
-            <div class="libro-card">
-                <div class="libro-titolo">{t}</div>
-                <div class="libro-autore">✍️ {cog}, {nom}</div>
-                <div class="libro-info">📖 Pagine: {pag} | 🔢 ISBN: {ib}</div>
-                <div class="libro-info">📍 Posizione: <span class="badge-scaffale">Scaffale {scaf}</span></div>
-                <div class="libro-recensione">💬 <strong>Trama:</strong><br>{rec}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            nuovo_scaf = st.text_input(f"Modifica Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
-            if nuovo_scaf != scaf:
-                cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
-                conn.commit()
-                salva_backup_permanente()
-                st.rerun()
-    if contatore == 0:
-        st.info("Nessun libro corrisponde ai filtri inseriti.")
-else:
-    st.info("Il catalogo è ancora vuoto.")
+                    copertina = v
