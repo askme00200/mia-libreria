@@ -197,8 +197,6 @@ with tab2:
                     st.session_state['m_recensione_val'] = rec_f
                     st.success("Dati trovati con successo!")
                 else:
-                    # STRATEGIA DI RISERVA SE INTERNET FALLISCE:
-                    # Mette comunque il titolo che hai digitato e pulisce le vecchie finestre
                     st.session_state['m_titolo_val'] = cerca_chiave_titolo.strip()
                     st.session_state['m_cognome_val'] = cerca_chiave_autore.strip() if cerca_chiave_autore else ""
                     st.session_state['m_nome_val'] = ""
@@ -238,7 +236,7 @@ with tab2:
         st.success("🎉 Libro salvato nel catalogo!")
         st.rerun()
 
-# --- SEZIONE RICERCA COMPLETA ---
+# --- SEZIONE RICERCA COMPLETA E GESTIONE SCAFFALI ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
 st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
 
@@ -270,22 +268,34 @@ if libri_tutti:
         with col1: 
             st.image(cop if cop else COPERTINA_DEFAULT, width=115)
         with col2:
+            trama_da_mostrare = rec.strip() if rec and rec.strip() else "Nessuna nota o trama inserita."
             st.markdown(f"""
             <div class="libro-card">
                 <div class="libro-titolo">{t}</div>
                 <div class="libro-autore">✍️ {cog}, {nom}</div>
                 <div class="libro-info">📖 Pagine: {pag} | 🔢 ISBN: {ib}</div>
                 <div class="libro-info">📍 Posizione: <span class="badge-scaffale">Scaffale {scaf}</span></div>
-                <div class="libro-recensione">💬 <strong>Trama:</strong><br>{rec}</div>
+                <div class="libro-recensione">💬 <strong>Trama / Note:</strong><br>{trama_da_mostrare}</div>
             </div>
             """, unsafe_allow_html=True)
             
-            nuovo_scaf = st.text_input(f"Modifica Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
-            if nuovo_scaf != scaf:
-                cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
-                conn.commit()
-                salva_backup_permanente()
-                st.rerun()
+            # Area modifiche e tasto elimina
+            col_azione1, col_azione2 = st.columns([4, 1])
+            with col_azione1:
+                nuovo_scaf = st.text_input(f"Sposta di Scaffale", value=scaf, key=f"edit_scaf_{db_id}")
+                if nuovo_scaf != scaf:
+                    cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
+                    conn.commit()
+                    salva_backup_permanente()
+                    st.rerun()
+            with col_azione2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️ Elimina", key=f"del_{db_id}"):
+                    cursor.execute("DELETE FROM libri WHERE id = ?", (db_id,))
+                    conn.commit()
+                    salva_backup_permanente()
+                    st.success(f"Eliminato!")
+                    st.rerun()
                 
     if contatore == 0:
         st.info("Nessun libro corrisponde ai filtri inseriti.")
