@@ -114,7 +114,7 @@ def scarica_dati_da_titolo(titolo, cognome):
                 copertina = COPERTINA_DEFAULT
                 if "imageLinks" in v_info:
                     copertina = v_info["imageLinks"].get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
-                return copertina, v_info.get("description", "Nessuna trama.")
+                return copertina, v_info.get("description", "Nessuna trama disponibile.")
     except:
         pass
     return COPERTINA_DEFAULT, "Nessuna trama disponibile."
@@ -132,15 +132,13 @@ if libri_export:
     st.sidebar.download_button("📥 Scarica Excel su PC", data=csv_data.encode('utf-8'), file_name="i_miei_libri.csv", mime="text/csv")
 
 st.subheader("📥 Inserimento Nuovi Libri")
-tab1, tab2 = st.tabs(["⚡ Via ISBN Rapido", "✍️ Manuale Completo"])
+tab1, tab2 = st.tabs(["⚡ Via ISBN Rapido", "📚 Inserimento in Libreria"])
 
 with tab1:
     isbn_input = st.text_input("Incolla o Scansiona l'ISBN del libro e premi Invio", key="ins_isbn")
     if isbn_input:
-        # SUPER FILTRO: tiene SOLO i numeri del codice, pulendo scritte e spazi dell'iPhone
         isbn_pulito = re.sub(r'\D', '', isbn_input).strip()
-        
-        if len(isbn_pulito) >= 10:  # Controlla che sia rimasto un ISBN valido
+        if len(isbn_pulito) >= 10:
             cursor.execute("SELECT id, titolo FROM libri WHERE isbn = ?", (isbn_pulito,))
             if cursor.fetchone():
                 st.warning("Questo libro è già presente nel tuo catalogo!")
@@ -158,25 +156,39 @@ with tab1:
                         st.success(f"🎉 Splendido! Aggiunto: {titolo}")
                         st.rerun()
         else:
-            st.error("Il codice scansionato non sembra contenere un numero ISBN valido. Riprova!")
+            st.error("Codice ISBN non valido.")
 
 with tab2:
-    ins_titolo = st.text_input("Titolo del Libro")
-    ins_cognome = st.text_input("Cognome Autore")
-    ins_nome = st.text_input("Nome Autore")
-    btn_salva = st.button("🌟 SALVA IL LIBRO ORA")
-    if btn_salva and ins_titolo and ins_cognome:
-        with st.spinner("Generazione scheda..."):
+    st.markdown("✍️ *Inserisci i dati principali per cercare la copertina ed aggiungerlo al volo.*")
+    ins_titolo = st.text_input("Titolo del Libro", key="manual_t")
+    ins_cognome = st.text_input("Cognome Autore", key="manual_c")
+    ins_nome = st.text_input("Nome Autore (Opzionale)", key="manual_n")
+    
+    btn_anteprima = st.button("🔎 CERCA COPERTINA E PREPARATI A SALVARE", key="btn_ant_manual")
+    
+    if ins_titolo and ins_cognome and btn_anteprima:
+        with st.spinner("Ricerca informazioni e copertina su Internet..."):
             cop_online, rec_online = scarica_dati_da_titolo(ins_titolo, ins_cognome)
-            cursor.execute('''
-                INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', ("Manuale", ins_titolo, ins_cognome.strip(), ins_nome.strip(), "", "N.D.", "N.D.", cop_online, rec_online, "Non assegnato"))
-            conn.commit()
-            salva_backup_permanente()
-            st.balloons()
-            st.success("🎉 Libro registrato con successo!")
-            st.rerun()
+            
+            st.markdown("### 🔎 Anteprima Trovata:")
+            col_ant1, col_ant2 = st.columns([1, 4])
+            with col_ant1:
+                st.image(cop_online, width=100)
+            with col_ant2:
+                st.markdown(f"**Titolo:** {ins_titolo}  \n**Autore:** {ins_cognome} {ins_nome}")
+                st.caption(f"*Trama:* {rec_online[:200]}...")
+            
+            btn_salva = st.button("🌟 CONFERMA E SALVA IL LIBRO ORA", key="btn_save_manual")
+            if btn_salva:
+                cursor.execute('''
+                    INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', ("Manuale", ins_titolo, ins_cognome.strip(), ins_nome.strip(), "N.D.", "N.D.", "N.D.", cop_online, rec_online, "Non assegnato"))
+                conn.commit()
+                salva_backup_permanente()
+                st.balloons()
+                st.success("🎉 Libro registrato con successo!")
+                st.rerun()
 
 # --- SEZIONE RICERCA COMPLETA ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
