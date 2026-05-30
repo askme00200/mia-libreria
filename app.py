@@ -197,7 +197,16 @@ with tab2:
                     st.session_state['m_recensione_val'] = rec_f
                     st.success("Dati trovati con successo!")
                 else:
-                    st.error("Nessun dato trovato. Controlla di aver scritto bene il titolo!")
+                    # STRATEGIA DI RISERVA SE INTERNET FALLISCE:
+                    # Mette comunque il titolo che hai digitato e pulisce le vecchie finestre
+                    st.session_state['m_titolo_val'] = cerca_chiave_titolo.strip()
+                    st.session_state['m_cognome_val'] = cerca_chiave_autore.strip() if cerca_chiave_autore else ""
+                    st.session_state['m_nome_val'] = ""
+                    st.session_state['m_pagine_val'] = ""
+                    st.session_state['m_data_val'] = ""
+                    st.session_state['m_copertina_val'] = ""
+                    st.session_state['m_recensione_val'] = ""
+                    st.warning("⚠️ Google Books non risponde. Ho inserito il titolo nella finestra sotto, compila il resto a mano!")
 
     st.markdown("---")
     finestra_titolo = st.text_input("Titolo Libro Trovato", value=st.session_state['m_titolo_val'])
