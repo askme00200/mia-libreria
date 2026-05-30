@@ -80,7 +80,7 @@ def analizza_autore(autore_string):
         return "Sconosciuto", "Sconosciuto"
     parti = autore_string.strip().split()
     if len(parti) == 1:
-        return赶parti[0], ""
+        return parti[0], ""
     return parti[-1], " ".join(parti[:-1])
 
 def cerca_dati_online(isbn_code):
@@ -179,3 +179,22 @@ with tab2:
             st.rerun()
 
 # --- SEZIONE RICERCA COMPLETA ---
+st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
+st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
+
+col_c1, col_c2, col_c3 = st.columns(3)
+with col_c1:
+    cerca_titolo = st.text_input("🔍 Cerca per Titolo", key="c_tit")
+with col_c2:
+    cerca_cognome = st.text_input("👤 Cerca per Cognome Autore", key="c_cog")
+with col_c3:
+    cerca_scaffale = st.text_input("🗄️ Cerca per Scaffale", key="c_scaf")
+
+cerca_recensione = st.text_input("💬 Cerca parole nella Trama o Recensione", key="c_rec")
+
+cursor.execute("SELECT id, filename, titolo, cognome_autore, nome_autore, isbn, pagine, copertina, recensione, scaffale FROM libri ORDER BY id DESC")
+libri_tutti = cursor.fetchall()
+
+if libri_tutti:
+    contatore = 0
+    for row in
