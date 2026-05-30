@@ -4,7 +4,7 @@ import os
 import urllib.request
 import urllib.parse
 
-st.set_page_config(page_title="Libreria Automatica", layout="wide")
+st.set_page_config(page_title="Libreria Personale", layout="wide")
 
 FILE_DATI = "archivio_libri.json"
 
@@ -35,47 +35,50 @@ def cerca_libro(titolo):
                 }
     except: return None
 
-st.title("📚 Libreria Automatica")
+st.title("📚 La Mia Libreria")
 
+# Stato temporaneo
 if 'temp' not in st.session_state: st.session_state.temp = {}
 
-cerca_input = st.text_input("🔍 Inserisci titolo da cercare:")
-if st.button("Trova Dati"):
-    risultato = cerca_libro(cerca_input)
-    if risultato: st.session_state.temp = risultato
-    else: st.error("Non trovato, compila manualmente.")
-
-# Campi visibili
-titolo = st.text_input("Titolo", value=st.session_state.temp.get('titolo', ''))
-autore = st.text_input("Autore", value=st.session_state.temp.get('autore', ''))
-trama = st.text_area("Note/Trama", value=st.session_state.temp.get('trama', ''))
-
-# Campo invisibile per mantenere la copertina
-cover_invisibile = st.text_input("Cover (nascosto)", value=st.session_state.temp.get('cover', ''), key="cover_inv", help="Questo campo serve al programma")
-st.markdown("<style>#MainMenu {visibility: hidden;} div[data-testid='stTextInput']:has(input[aria-label='Cover (nascosto)']) {display: none;}</style>", unsafe_allow_html=True)
-
-if st.button("✅ Salva nel Catalogo"):
-    libri = carica_dati()
-    libri.append({
-        "titolo": titolo, 
-        "autore": autore, 
-        "trama": trama, 
-        "cover": st.session_state.get('cover_inv', '')
-    })
-    salva_dati(libri)
-    st.session_state.temp = {}
-    st.rerun()
+# 1. RICERCA
+col_ricerca, col_vuota = st.columns([2, 1])
+with col_ricerca:
+    cerca_input = st.text_input("🔍 Cerca libro online per nome")
+    if st.button("🚀 Cerca"):
+        risultato = cerca_libro(cerca_input)
+        if risultato: st.session_state.temp = risultato
+        else: st.error("Non trovato, compila a mano.")
 
 st.divider()
-st.subheader("📖 Archivio")
+
+# 2. INSERIMENTO
+col1, col2 = st.columns(2)
+with col1:
+    titolo = st.text_input("Titolo", value=st.session_state.temp.get('titolo', ''))
+    autore = st.text_input("Autore", value=st.session_state.temp.get('autore', ''))
+with col2:
+    scaffale = st.text_input("Posizione (es: Scaffale A)")
+    cover_url = st.text_input("URL Copertina", value=st.session_state.temp.get('cover', ''))
+
+trama = st.text_area("Note / Trama", value=st.session_state.temp.get('trama', ''))
+
+if st.button("✅ SALVA NEL CATALOGO"):
+    libri = carica_dati()
+    libri.append({"titolo": titolo, "autore": autore, "scaffale": scaffale, "trama": trama, "cover": cover_url})
+    salva_dati(libri)
+    st.session_state.temp = {}
+    st.success("Libro aggiunto!")
+    st.rerun()
+
+# 3. ARCHIVIO (Il richiamo dei libri)
+st.subheader("📖 Catalogo Completo")
 libri = carica_dati()
 for l in reversed(libri):
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if l.get('cover'):
-            st.image(l['cover'], width=100)
-        else:
-            st.write("📖")
-    with col2:
-        st.write(f"**{l.get('titolo')}**")
-        st.write(f"*{l.get('autore')}*")
+    with st.expander(f"{l.get('titolo')} - {l.get('autore')}"):
+        cols = st.columns([1, 3])
+        with cols[0]:
+            if l.get('cover'): st.image(l['cover'], width=150)
+            else: st.write("No copertina")
+        with cols[1]:
+            st.write(f"**Scaffale:** {l.get('scaffale', 'Non specificato')}")
+            st.write(f"**Trama/Note:** {l.get('trama', 'Nessuna nota')}")
