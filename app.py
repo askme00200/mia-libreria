@@ -110,12 +110,7 @@ def cerca_dati_online(isbn_code):
     return None
 
 def scarica_dati_da_titolo(titolo, autore_ricerca):
-    query = ""
-    if autore_ricerca:
-        query = f"intitle:{titolo} inauthor:{autore_ricerca}"
-    else:
-        query = f"intitle:{titolo}"
-        
+    query = f"intitle:{titolo} inauthor:{autore_ricerca}" if autore_ricerca else f"intitle:{titolo}"
     url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(query)}&maxResults=1"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
@@ -188,103 +183,4 @@ with tab2:
             with st.spinner("Interrogazione dei server di ricerca..."):
                 risultato = scarica_dati_da_titolo(cerca_chiave_titolo, cerca_chiave_autore)
                 if risultato:
-                    t_f, c_f, n_f, p_f, d_f, cop_f, rec_f = risultato
-                    st.session_state['m_titolo_val'] = t_f
-                    st.session_state['m_cognome_val'] = c_f
-                    st.session_state['m_nome_val'] = n_f
-                    st.session_state['m_pagine_val'] = p_f
-                    st.session_state['m_data_val'] = d_f
-                    st.session_state['m_copertina_val'] = cop_f
-                    st.session_state['m_recensione_val'] = rec_f
-                    st.success("Ottimo! Dati trovati e inseriti nelle finestre qui sotto.")
-                else:
-                    # Se il database risponde picche, pre-compiliamo solo il titolo cercato per aiutarti
-                    st.session_state['m_titolo_val'] = cerca_chiave_titolo
-                    st.session_state['m_cognome_val'] = cerca_chiave_autore if cerca_chiave_autore else ""
-                    st.warning("I database esterni sono temporaneamente occupati. Ho inserito il titolo in basso, puoi compilare il resto a mano!")
-
-    st.markdown("---")
-    # Finestre dell'applicazione pronte per il salvataggio
-    finestra_titolo = st.text_input("Titolo Libro", value=st.session_state['m_titolo_val'])
-    finestra_cognome = st.text_input("Cognome Autore", value=st.session_state['m_cognome_val'])
-    finestra_nome = st.text_input("Nome Autore", value=st.session_state['m_nome_val'])
-    finestra_pagine = st.text_input("Numero Pagine", value=st.session_state['m_pagine_val'])
-    finestra_data = st.text_input("Data Pubblicazione", value=st.session_state['m_data_val'])
-    finestra_recensione = st.text_area("Trama / Note", value=st.session_state['m_recensione_val'])
-    
-    btn_salva = st.button("🌟 SALVA DEFINITIVAMENTE NELLO SCAFFALE")
-    if btn_salva and finestra_titolo and finestra_cognome:
-        cop_da_salvare = st.session_state['m_copertina_val'] if st.session_state['m_copertina_val'] else COPERTINA_DEFAULT
-        cursor.execute('''
-            INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', ("Manuale", finestra_titolo, finestra_cognome.strip(), finestra_nome.strip(), "N.D.", finestra_pagine, finestra_data, cop_da_salvare, finestra_recensione, "Non assegnato"))
-        conn.commit()
-        salva_backup_permanente()
-        
-        # Svuota tutto dopo aver salvato
-        st.session_state['m_titolo_val'] = ""
-        st.session_state['m_cognome_val'] = ""
-        st.session_state['m_nome_val'] = ""
-        st.session_state['m_pagine_val'] = "N.D."
-        st.session_state['m_data_val'] = "N.D."
-        st.session_state['m_copertina_val'] = ""
-        st.session_state['m_recensione_val'] = ""
-        
-        st.balloons()
-        st.success("🎉 Libro salvato nel catalogo!")
-        st.rerun()
-
-# --- SEZIONE RICERCA ---
-st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
-st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
-
-col_c1, col_c2, col_c3 = st.columns(3)
-with col_c1:
-    cerca_titolo = st.text_input("🔍 Cerca per Titolo", key="c_tit")
-with col_c2:
-    cerca_cognome = st.text_input("👤 Cerca per Cognome Autore", key="c_cog")
-with col_c3:
-    cerca_scaffale = st.text_input("🗄️ Cerca per Scaffale", key="c_scaf")
-
-cerca_recensione = st.text_input("💬 Cerca parole nella Trama o Recensione", key="c_rec")
-
-cursor.execute("SELECT id, filename, titolo, cognome_autore, nome_autore, isbn, pagine, copertina, recensione, scaffale FROM libri ORDER BY id DESC")
-libri_tutti = cursor.fetchall()
-
-if libri_tutti:
-    contatore = 0
-    for row in libri_tutti:
-        db_id, filename, t, cog, nom, ib, pag, cop, rec, scaf = row
-        
-        if cerca_titolo and cerca_titolo.lower() not in t.lower(): continue
-        if cerca_cognome and cerca_cognome.lower() not in (cog if cog else "").lower(): continue
-        if cerca_scaffale and cerca_scaffale.lower() not in (scaf if scaf else "").lower(): continue
-        if cerca_recensione and cerca_recensione.lower() not in (rec if rec else "").lower(): continue
-        
-        contatore += 1
-        col1, col2 = st.columns([1, 5])
-        with col1: 
-            st.image(cop if cop else COPERTINA_DEFAULT, width=115)
-        with col2:
-            st.markdown(f"""
-            <div class="libro-card">
-                <div class="libro-titolo">{t}</div>
-                <div class="libro-autore">✍️ {cog}, {nom}</div>
-                <div class="libro-info">📖 Pagine: {pag} | 🔢 ISBN: {ib}</div>
-                <div class="libro-info">📍 Posizione: <span class="badge-scaffale">Scaffale {scaf}</span></div>
-                <div class="libro-recensione">💬 <strong>Trama:</strong><br>{rec}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            nuovo_scaf = st.text_input(f"Modifica Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
-            if nuovo_scaf != scaf:
-                cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
-                conn.commit()
-                salva_backup_permanente()
-                st.rerun()
-                
-    if contatore == 0:
-        st.info("Nessun libro corrisponde ai filtri inseriti.")
-else:
-    st.info("Il catalogo è ancora vuoto.")
+                    t_f, c_f, n_f, p_f
