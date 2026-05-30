@@ -43,7 +43,6 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Inizializzazione variabili di stato per i campi manuali
 if 'm_titolo_val' not in st.session_state: st.session_state['m_titolo_val'] = ""
 if 'm_cognome_val' not in st.session_state: st.session_state['m_cognome_val'] = ""
 if 'm_nome_val' not in st.session_state: st.session_state['m_nome_val'] = ""
@@ -110,8 +109,11 @@ def cerca_dati_online(isbn_code):
     return None
 
 def scarica_dati_da_titolo(titolo, autore_ricerca):
-    query = f"intitle:{titolo} inauthor:{autore_ricerca}"
-    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(query)}&maxResults=1"
+    termini_ricerca = titolo
+    if autore_ricerca:
+        termini_ricerca += f" {autore_ricerca}"
+        
+    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(termini_ricerca)}&maxResults=1&hl=it"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=6) as response:
@@ -124,11 +126,13 @@ def scarica_dati_da_titolo(titolo, autore_ricerca):
                 trama = v_info.get("description", "Nessuna trama disponibile.")
                 pagine = str(v_info.get("pageCount", "N.D."))
                 data_pub = v_info.get("publishedDate", "N.D.")
+                
                 autori = v_info.get("authors", ["Sconosciuto"])
                 autore_trovato = autori[0]
                 parti = autore_trovato.strip().split()
                 cog_t = parti[-1] if len(parti) > 1 else autore_trovato
                 nom_t = " ".join(parti[:-1]) if len(parti) > 1 else ""
+                
                 tit_t = v_info.get("title", titolo)
                 return tit_t, cog_t, nom_t, pagine, data_pub, copertina, trama
     except:
@@ -137,7 +141,7 @@ def scarica_dati_da_titolo(titolo, autore_ricerca):
 
 st.title("📚 La Mia Libreria Personale")
 
-# Menu laterale di esportazione
+# Menu laterale
 cursor.execute("SELECT filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale FROM libri")
 libri_export = cursor.fetchall()
 if libri_export:
@@ -172,11 +176,10 @@ with tab1:
                     st.rerun()
 
 with tab2:
-    st.markdown("Digita il titolo (e se vuoi l'autore) e premi **Cerca Dati Online** per riempire le finestre automaticamente!")
+    st.markdown("Digita il titolo e premi **Cerca Dati Online** per riempire le finestre automaticamente!")
     
-    # Campi di input legati alla memoria dell'app
-    cerca_chiave_titolo = st.text_input("1. Scrivi Titolo da cercare")
-    cerca_chiave_autore = st.text_input("2. Scrivi Autore da cercare (Facoltativo)")
+    cerca_chiave_titolo = st.text_input("1. Scrivi il Titolo da cercare (es: La macchia umana)")
+    cerca_chiave_autore = st.text_input("2. Scrivi l'Autore - Opzionale (Puoi lasciarlo vuoto!)")
     
     if st.button("🔍 CERCA DATI ONLINE"):
         if cerca_chiave_titolo:
@@ -191,12 +194,11 @@ with tab2:
                     st.session_state['m_data_val'] = d_f
                     st.session_state['m_copertina_val'] = cop_f
                     st.session_state['m_recensione_val'] = rec_f
-                    st.success("Dati trovati! Controlla le finestre qui sotto.")
+                    st.success("Dati trovati con successo!")
                 else:
-                    st.error("Nessun dato trovato online. Compila pure a mano!")
+                    st.error("Nessun dato trovato. Controlla di aver scritto bene il titolo!")
 
     st.markdown("---")
-    # Finestre dell'applicazione riempite automaticamente
     finestra_titolo = st.text_input("Titolo Libro Trovato", value=st.session_state['m_titolo_val'])
     finestra_cognome = st.text_input("Cognome Autore", value=st.session_state['m_cognome_val'])
     finestra_nome = st.text_input("Nome Autore", value=st.session_state['m_nome_val'])
@@ -204,8 +206,9 @@ with tab2:
     finestra_data = st.text_input("Data Pubblicazione", value=st.session_state['m_data_val'])
     finestra_recensione = st.text_area("Trama / Note", value=st.session_state['m_recensione_val'])
     
+    # Ora per salvare bastano solo il titolo e il cognome compilati (anche se trovati da internet)
     btn_salva = st.button("🌟 SALVA DEFINITIVAMENTE NELLO SCAFFALE")
-    if btn_salva and finestra_titolo and finestra_cognome:
+    if btn_salva and finestra_titolo:
         cop_da_salvare = st.session_state['m_copertina_val'] if st.session_state['m_copertina_val'] else COPERTINA_DEFAULT
         cursor.execute('''
             INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
@@ -214,7 +217,6 @@ with tab2:
         conn.commit()
         salva_backup_permanente()
         
-        # Azzera i campi dopo il salvataggio
         st.session_state['m_titolo_val'] = ""
         st.session_state['m_cognome_val'] = ""
         st.session_state['m_nome_val'] = ""
