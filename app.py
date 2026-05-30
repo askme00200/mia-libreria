@@ -1,12 +1,9 @@
 import streamlit as st
 import sqlite3
-import urllib.request
-import urllib.parse
 import json
 import os
-import re
 
-# --- CONFIGURAZIONE GRAFICA ---
+# --- CONFIGURAZIONE GRAFICA SICURA E PULITA ---
 st.set_page_config(page_title="La Mia Libreria", layout="wide")
 st.markdown("""
     <style>
@@ -39,20 +36,28 @@ conn.commit()
 
 COPERTINA_DEFAULT = "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=150"
 
+# --- RECUPERO FORZATO E AGGRESSIVO DAL BACKUP ---
 if os.path.exists('backup_libri.json'):
     try:
         with open('backup_libri.json', 'r', encoding='utf-8') as f:
             libri_backup = json.load(f)
-            for l in libri_backup:
-                cursor.execute("SELECT id FROM libri WHERE isbn = ? AND titolo = ?", (l['isbn'], l['titolo']))
-                if not cursor.fetchone():
-                    cursor.execute('''
-                        INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (l['filename'], l['titolo'], l['cognome_autore'], l['nome_autore'], l['isbn'], l['pagine'], l['data_pub'], l['copertina'], l['recensione'], l['scaffale']))
-            conn.commit()
-    except:
-        pass
+            if libri_backup:
+                for l in libri_backup:
+                    # Controlla se il libro esiste già nel database per non duplicarlo
+                    cursor.execute("SELECT id FROM libri WHERE titolo = ? AND cognome_autore = ?", (l.get('titolo', '').strip(), l.get('cognome_autore', '').strip()))
+                    if not cursor.fetchone():
+                        cursor.execute('''
+                            INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            l.get('filename', 'Catalogo'), l.get('titolo', ''), l.get('cognome_autore', ''), 
+                            l.get('nome_autore', ''), l.get('isbn', 'N.D.'), l.get('pagine', 'N.D.'), 
+                            l.get('data_pub', 'N.D.'), l.get('copertina', COPERTINA_DEFAULT), 
+                            l.get('recensione', ''), l.get('scaffale', 'Non assegnato')
+                        ))
+                conn.commit()
+    except Exception as e:
+        st.sidebar.error(f"Errore lettura backup: {e}")
 
 def salva_backup_permanente():
     cursor.execute("SELECT filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale FROM libri")
@@ -66,190 +71,65 @@ def salva_backup_permanente():
     with open('backup_libri.json', 'w', encoding='utf-8') as f:
         json.dump(libri_list, f, ensure_ascii=False, indent=4)
 
-def cerca_da_isbn_online(isbn_code):
-    url_ol = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn_code}&format=json&jscmd=data"
-    try:
-        req = urllib.request.Request(url_ol, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            chiave = f"ISBN:{isbn_code}"
-            if chiave in data:
-                b_info = data[chiave]
-                titolo = b_info.get("title", "")
-                autori = b_info.get("authors", [])
-                autore_string = autori[0].get("name", "") if autori else ""
-                parti = autore_string.strip().split()
-                cognome = parti[-1] if len(parti) > 1 else autore_string
-                nome = " ".join(parti[:-1]) if len(parti) > 1 else ""
-                pagine = str(b_info.get("number_of_pages", "N.D."))
-                data_pub = b_info.get("publish_date", "N.D.")
-                copertina = COPERTINA_DEFAULT
-                if "cover" in b_info:
-                    copertina = b_info["cover"].get("large", b_info["cover"].get("medium", COPERTINA_DEFAULT)).replace("http://", "https://")
-                return titolo, cognome, nome, pagine, data_pub, copertina, ""
-    except:
-        pass
-    return None
-
-def cerca_da_wikipedia(titolo):
-    # Cerca la pagina del libro su Wikipedia in italiano
-    url_wiki = f"https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(titolo)}&format=json"
-    try:
-        req = urllib.request.Request(url_wiki, headers={'User-Agent': 'MiaLibreriaBot/1.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            if data.get("query", {}).get("search"):
-                page_title = data["query"]["search"][0]["title"]
-                # Estrae il riassunto/trama iniziale
-                url_text = f"https://it.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&titles={urllib.parse.quote(page_title)}&format=json"
-                req_text = urllib.request.Request(url_text, headers={'User-Agent': 'MiaLibreriaBot/1.0'})
-                with urllib.request.urlopen(req_text, timeout=5) as resp_text:
-                    data_text = json.loads(resp_text.read().decode('utf-8'))
-                    pages = data_text.get("query", {}).get("pages", {})
-                    for p_id in pages:
-                        trama_pulita = pages[p_id].get("extract", "")
-                        # Toglie tag o scritte superflue
-                        trama_pulita = re.sub('<[^<]+?>', '', trama_pulita)[:400] + "..."
-                        return page_title, "In aggiornamento", "", "N.D.", "N.D.", COPERTINA_DEFAULT, trama_pulita
-    except:
-        pass
-    return None
-
-def cerca_da_titolo_online(titolo, autore_ricerca):
-    query = f"intitle:{titolo} inauthor:{autore_ricerca}" if autore_ricerca else f"intitle:{titolo}"
-    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(query)}&maxResults=1"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            if "items" in data:
-                v_info = data["items"][0]["volumeInfo"]
-                copertina = COPERTINA_DEFAULT
-                if "imageLinks" in v_info:
-                    copertina = v_info["imageLinks"].get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
-                trama = v_info.get("description", "")
-                pagine = str(v_info.get("pageCount", "N.D."))
-                data_pub = v_info.get("publishedDate", "N.D.")
-                autori = v_info.get("authors", [""])
-                autore_trovato = autori[0]
-                parti = autore_trovato.strip().split()
-                cog_t = parti[-1] if len(parti) > 1 else autore_trovato
-                nom_t = " ".join(parti[:-1]) if len(parti) > 1 else ""
-                tit_t = v_info.get("title", titolo)
-                return tit_t, cog_t, nom_t, pagine, data_pub, copertina, trama
-    except:
-        pass
-    return None
-
 st.title("📚 La Mia Libreria Personale")
 
-# Inizializzazione della memoria dell'applicazione
-if 'f_titolo' not in st.session_state: st.session_state['f_titolo'] = ""
-if 'f_cognome' not in st.session_state: st.session_state['f_cognome'] = ""
-if 'f_nome' not in st.session_state: st.session_state['f_nome'] = ""
-if 'f_pagine' not in st.session_state: st.session_state['f_pagine'] = "N.D."
-if 'f_data' not in st.session_state: st.session_state['f_data'] = "N.D."
-if 'f_trama' not in st.session_state: st.session_state['f_trama'] = ""
-if 'f_copertina' not in st.session_state: st.session_state['f_copertina'] = COPERTINA_DEFAULT
-if 'f_isbn' not in st.session_state: st.session_state['f_isbn'] = "N.D."
+# Esportazione di sicurezza in Excel sempre attiva sulla sinistra
+cursor.execute("SELECT filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale FROM libri")
+libri_export = cursor.fetchall()
+if libri_export:
+    csv_data = "Titolo;Autore;ISBN;Pagine;Scaffale\n"
+    for l in libri_export:
+        csv_data += f"{l[1]};{l[2]} {l[3]};{l[4]};{l[5]};{l[9]}\n"
+    st.sidebar.markdown("### 🛡️ Sicurezza")
+    st.sidebar.download_button("📥 Scarica Excel su PC", data=csv_data.encode('utf-8'), file_name="i_miei_libri.csv", mime="text/csv")
 
-col_ric1, col_ric2 = st.columns(2)
+st.subheader("📥 Inserimento Manuale Rapido (Senza blocchi o attese)")
 
-with col_ric1:
-    st.markdown("**⚡ OPZIONE A: Cerca da Codice ISBN**")
-    isbn_raw = st.text_input("Incolla o digita l'ISBN:", key="input_isbn_raw")
-    if st.button("CONTROLLA CODICE ISBN"):
-        if isbn_raw:
-            isbn_pulito = re.sub(r'[^0-9]', '', isbn_raw).strip()
-            ris_isbn = cerca_da_isbn_online(isbn_pulito)
-            if ris_isbn:
-                st.session_state['f_titolo'], st.session_state['f_cognome'], st.session_state['f_nome'], st.session_state['f_pagine'], st.session_state['f_data'], st.session_state['f_copertina'], st.session_state['f_trama'] = ris_isbn
-                st.session_state['f_isbn'] = isbn_pulito
-                st.success("Trovato da ISBN online!")
-            else:
-                st.session_state['f_isbn'] = isbn_pulito
-                st.error("I server ISBN non rispondono. Compila pure i dati qui sotto a mano!")
-
-with col_ric2:
-    st.markdown("**🔍 OPZIONE B: Cerca per Titolo e Autore**")
-    c_titolo = st.text_input("Scrivi Titolo da cercare:", key="input_titolo_cerca")
-    c_autore = st.text_input("Scrivi Autore da cercare (Opzionale):", key="input_autore_cerca")
-    if st.button("CERCA DATI DA TITOLO"):
-        if c_titolo:
-            # 1. Prova prima con Google Books
-            ris_tit = cerca_da_titolo_online(c_titolo, c_autore)
-            if ris_tit:
-                st.session_state['f_titolo'], st.session_state['f_cognome'], st.session_state['f_nome'], st.session_state['f_pagine'], st.session_state['f_data'], st.session_state['f_copertina'], st.session_state['f_trama'] = ris_tit
-                st.session_state['f_isbn'] = "N.D."
-                st.success("Trovato con successo su Google Books!")
-            else:
-                # 2. SE GOOGLE È OCCUPATO, PARTE IL PIANO DI EMERGENZA: CHIEDI A WIKIPEDIA!
-                ris_wiki = cerca_da_wikipedia(c_titolo)
-                if ris_wiki:
-                    st.session_state['f_titolo'], st.session_state['f_cognome'], st.session_state['f_nome'], st.session_state['f_pagine'], st.session_state['f_data'], st.session_state['f_copertina'], st.session_state['f_trama'] = ris_wiki
-                    st.session_state['f_isbn'] = "N.D."
-                    st.warning("Google era occupato, ma ho recuperato la trama e i dati da Wikipedia italiana!")
-                else:
-                    # 3. Se anche Wikipedia fallisce, sposta quello che hai digitato
-                    st.session_state['f_titolo'] = c_titolo
-                    parti_aut = c_autore.strip().split() if c_autore else []
-                    st.session_state['f_cognome'] = parti_aut[-1] if len(parti_aut) > 1 else (c_autore if c_autore else "")
-                    st.session_state['f_nome'] = " ".join(parti_aut[:-1]) if len(parti_aut) > 1 else ""
-                    st.session_state['f_trama'] = ""
-                    st.warning("Database esterni occupati. Ho inserito il titolo in basso, scrivi pure la trama a mano!")
-
-st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
-st.markdown("### ✍️ SCHEDA DEL LIBRO (Finestre libere e sempre editabili)")
-
-finestra_titolo = st.text_input("Titolo del Libro", value=st.session_state['f_titolo'], key="reale_titolo")
-finestra_cognome = st.text_input("Cognome Autore", value=st.session_state['f_cognome'], key="reale_cognome")
-finestra_nome = st.text_input("Nome Autore", value=st.session_state['f_nome'], key="reale_nome")
-finestra_pagine = st.text_input("Numero Pagine", value=st.session_state['f_pagine'], key="reale_pagine")
-finestra_data = st.text_input("Data Pubblicazione", value=st.session_state['f_data'], key="reale_data")
-finestra_recensione = st.text_area("Trama / Note Personali", value=st.session_state['f_trama'], key="reale_trama", height=150)
+# Finestre pulite, stabili e reattive al 100% su qualsiasi telefono
+finestra_titolo = st.text_input("Titolo del Libro", key="reale_titolo")
+finestra_cognome = st.text_input("Cognome Autore", key="reale_cognome")
+finestra_nome = st.text_input("Nome Autore", key="reale_nome")
+finestra_isbn = st.text_input("Codice ISBN (Opzionale)", key="reale_isbn", value="N.D.")
+finestra_pagine = st.text_input("Numero Pagine (Opzionale)", key="reale_pagine", value="N.D.")
+finestra_recensione = st.text_area("Trama / Note Personali", key="reale_trama", height=150)
 
 if st.button("🌟 SALVA DEFINITIVAMENTE NELLO SCAFFALE"):
     t_salva = finestra_titolo.strip()
     c_salva = finestra_cognome.strip()
+    
     if t_salva and c_salva:
         cursor.execute('''
             INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', ("Catalogo", t_salva, c_salva, finestra_nome.strip(), st.session_state['f_isbn'], finestra_pagine.strip(), finestra_data.strip(), st.session_state['f_copertina'], finestra_recensione.strip(), "Non assegnato"))
+        ''', ("Catalogo", t_salva, c_salva, finestra_nome.strip(), finestra_isbn.strip(), finestra_pagine.strip(), "N.D.", COPERTINA_DEFAULT, finestra_recensione.strip(), "Non assegnato"))
         conn.commit()
         salva_backup_permanente()
-        
-        # Svuotamento totale per il prossimo libro
-        st.session_state['f_titolo'], st.session_state['f_cognome'], st.session_state['f_nome'] = "", "", ""
-        st.session_state['f_pagine'], st.session_state['f_data'], st.session_state['f_trama'] = "N.D.", "N.D.", ""
-        st.session_state['f_copertina'], st.session_state['f_isbn'] = COPERTINA_DEFAULT, "N.D."
         st.balloons()
-        st.success("🎉 Libro salvato correttamente!")
+        st.success("🎉 Libro salvato nell'archivio e protetto nel backup!")
         st.rerun()
     else:
-        st.error("Inserisci almeno Titolo e Cognome Autore prima di premere Salva!")
+        st.error("Inserisci almeno il Titolo e il Cognome dell'Autore per salvare!")
 
-# --- SEZIONE ARCHIVIO ---
+# --- SEZIONE VISUALIZZAZIONE E FILTRI ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
-st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
+st.subheader("🔍 I Tuoi Libri in Archivio")
 
-col_c1, col_c2, col_c3 = st.columns(3)
+col_c1, col_c2 = st.columns(2)
 with col_c1: cerca_titolo = st.text_input("🔍 Cerca per Titolo", key="c_per_titolo")
 with col_c2: cerca_cognome = st.text_input("👤 Cerca per Cognome Autore", key="c_per_cognome")
-with col_c3: cerca_scaffale = st.text_input("🗄️ Cerca per Scaffale", key="c_per_scaffale")
 
 cursor.execute("SELECT id, filename, titolo, cognome_autore, nome_autore, isbn, pagine, copertina, recensione, scaffale FROM libri ORDER BY id DESC")
 libri_tutti = cursor.fetchall()
 
 if libri_tutti:
+    st.write(f"Libri totali nel catalogo: {len(libri_tutti)}")
     for row in libri_tutti:
         db_id, filename, t, cog, nom, ib, pag, cop, rec, scaf = row
         if cerca_titolo and cerca_titolo.lower() not in str(t).lower(): continue
         if cerca_cognome and cerca_cognome.lower() not in str(cog if cog else "").lower(): continue
-        if cerca_scaffale and cerca_scaffale.lower() not in str(scaf if scaf else "").lower(): continue
         
         col1, col2 = st.columns([1, 5])
-        with col1: st.image(cop if cop else COPERTINA_DEFAULT, width=115)
+        with col1: st.image(cop if cop else COPERTINA_DEFAULT, width=110)
         with col2:
             st.markdown(f"""
             <div class="libro-card">
@@ -260,11 +140,11 @@ if libri_tutti:
                 <div class="libro-recensione">💬 <strong>Trama:</strong><br>{rec}</div>
             </div>
             """, unsafe_allow_html=True)
-            nuovo_scaf = st.text_input(f"Modifica Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
+            nuovo_scaf = st.text_input(f"Sposta Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
             if nuovo_scaf != scaf:
                 cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
                 conn.commit()
                 salva_backup_permanente()
                 st.rerun()
 else:
-    st.info("Il catalogo è vuoto.")
+    st.info("Il catalogo visibile è vuoto. Se avevi libri salvati, assicurati che il file 'backup_libri.json' su GitHub non sia stato sovrascritto vuoto.")
