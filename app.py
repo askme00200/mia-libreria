@@ -233,3 +233,4 @@ if libri_tutti:
         st.info("Nessun libro corrisponde ai filtri inseriti.")
 else:
     st.info("Il catalogo è ancora vuoto. Inserisci il tuo primo libro qua sopra!")
+    
