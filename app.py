@@ -26,7 +26,6 @@ def cerca_libro(titolo):
             if data.get("docs"):
                 doc = data["docs"][0]
                 isbn = doc.get("isbn", [""])[0] if doc.get("isbn") else ""
-                # Link diretto alla copertina
                 cover_url = f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg" if isbn else ""
                 return {
                     "titolo": doc.get("title", ""),
@@ -46,10 +45,14 @@ if st.button("Trova Dati"):
     if risultato: st.session_state.temp = risultato
     else: st.error("Non trovato, compila manualmente.")
 
-# Campi di input (niente URL copertina visibile)
+# Campi visibili
 titolo = st.text_input("Titolo", value=st.session_state.temp.get('titolo', ''))
 autore = st.text_input("Autore", value=st.session_state.temp.get('autore', ''))
 trama = st.text_area("Note/Trama", value=st.session_state.temp.get('trama', ''))
+
+# Campo invisibile per mantenere la copertina
+cover_invisibile = st.text_input("Cover (nascosto)", value=st.session_state.temp.get('cover', ''), key="cover_inv", help="Questo campo serve al programma")
+st.markdown("<style>#MainMenu {visibility: hidden;} div[data-testid='stTextInput']:has(input[aria-label='Cover (nascosto)']) {display: none;}</style>", unsafe_allow_html=True)
 
 if st.button("✅ Salva nel Catalogo"):
     libri = carica_dati()
@@ -57,7 +60,7 @@ if st.button("✅ Salva nel Catalogo"):
         "titolo": titolo, 
         "autore": autore, 
         "trama": trama, 
-        "cover": st.session_state.temp.get('cover', '')
+        "cover": st.session_state.get('cover_inv', '')
     })
     salva_dati(libri)
     st.session_state.temp = {}
@@ -69,7 +72,6 @@ libri = carica_dati()
 for l in reversed(libri):
     col1, col2 = st.columns([1, 4])
     with col1:
-        # Visualizzazione sicura che non crasha
         if l.get('cover'):
             st.image(l['cover'], width=100)
         else:
