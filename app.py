@@ -13,11 +13,8 @@ st.markdown("""
     h3 { color: #2E7D32 !important; font-family: 'Georgia', serif; margin-top: 25px; font-weight: bold; }
     label { color: #4A2724 !important; font-weight: bold !important; font-size: 16px !important; }
     .stTextInput input, .stTextArea textarea { background-color: #FFFFFF !important; color: #2C1A18 !important; border: 1.8px solid #D35400 !important; border-radius: 8px !important; }
-    
-    /* Pulsante Salva Giallo Zafferano */
-    div.stButton > button.st-emotion-cache-1237fbg { background-color: #F39C12; color: #FFFFFF; border-radius: 10px; border: none; font-weight: bold; height: 48px; width: 100%; font-size: 18px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
-    
-    /* TESSERA DEL LIBRO */
+    div.stButton > button { background-color: #F39C12 !important; color: #FFFFFF !important; border-radius: 10px !important; border: none !important; font-weight: bold !important; height: 45px; }
+    div.stButton > button:hover { background-color: #E67E22 !important; }
     .libro-card { background-color: #FFFFFF; padding: 24px; border-radius: 14px; border-left: 7px solid #E67E22; margin-bottom: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.06); }
     .libro-titolo { color: #1A0F0E; font-family: 'Georgia', serif; font-size: 24px; font-weight: bold; margin-bottom: 8px; }
     .libro-autore { color: #8E3A2F; font-size: 18px; font-style: italic; margin-bottom: 14px; font-weight: 600; }
@@ -73,7 +70,7 @@ def cerca_dati_online(isbn_code):
 
 st.title("📚 La Mia Libreria Personale")
 
-# --- ESPORTAZIONE EXCEL ---
+# --- EXPORT EXCEL ---
 cursor.execute("SELECT titolo, cognome_autore, nome_autore, isbn, scaffale FROM libri")
 libri_export = cursor.fetchall()
 if libri_export:
@@ -102,12 +99,14 @@ with tab2:
     ins_titolo = st.text_input("Titolo del Libro (Obbligatorio)")
     ins_cognome = st.text_input("Cognome Autore (Opzionale)")
     ins_nome = st.text_input("Nome Autore (Opzionale)")
+    ins_isbn_man = st.text_input("Codice ISBN (Opzionale)")
     if st.button("🌟 SALVA IL LIBRO ORA", key="btn_manuale") and ins_titolo:
+        isbn_man_pulito = ins_isbn_man.replace("-", "").replace(" ", "").strip()
         cursor.execute('''INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', ("Manuale", ins_titolo, ins_cognome.strip(), ins_nome.strip(), "", "N.D.", "N.D.", COPERTINA_DEFAULT, "Nessuna trama disponibile.", "Non assegnato"))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', ("Manuale", ins_titolo, ins_cognome.strip(), ins_nome.strip(), isbn_man_pulito, "N.D.", "N.D.", COPERTINA_DEFAULT, "Nessuna trama disponibile.", "Non assegnato"))
         conn.commit(); salva_backup(); st.balloons(); st.rerun()
 
-# --- RICERCA COMPLETA E CANCELLAZIONE ---
+# --- RICERCA E CANCELLAZIONE ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
 st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
 
@@ -127,12 +126,9 @@ if libri_tutti:
         if cerca_scaffale and cerca_scaffale.lower() not in (scaf if scaf else "").lower(): continue
         
         col1, col2 = st.columns([1, 5])
-        with col1: 
-            st.image(cop if cop else COPERTINA_DEFAULT, width=115)
+        with col1: st.image(cop if cop else COPERTINA_DEFAULT, width=115)
         with col2:
             st.markdown(f'<div class="libro-card"><div class="libro-titolo">{t}</div><div class="libro-autore">✍️ {cog} {nom}</div><div>📖 Pagine: {pag} | 🔢 ISBN: {ib}</div><div>📍 Posizione: <span class="badge-scaffale">Scaffale {scaf}</span></div><div class="libro-recensione">💬 {rec}</div></div>', unsafe_allow_html=True)
-            
-            # Riga comandi sotto la scheda: Modifica scaffale a sinistra, Elimina a destra
             col_sub1, col_sub2 = st.columns([4, 1])
             with col_sub1:
                 nuovo_scaf = st.text_input(f"Sposta scaffale:", value=scaf, key=f"ed_{db_id}")
@@ -140,8 +136,8 @@ if libri_tutti:
                     cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
                     conn.commit(); salva_backup(); st.rerun()
             with col_sub2:
-                st.write("") # Spazio per allineare il bottone
+                st.write("")
                 if st.button("🗑️ Elimina", key=f"del_{db_id}"):
                     cursor.execute("DELETE FROM libri WHERE id = ?", (db_id,))
                     conn.commit(); salva_backup(); st.rerun()
-else: st.info("Il catalogo è vuoto. Inserisci il tuo primo libro!")
+else: st.info("Il catalogo è vuoto.")
