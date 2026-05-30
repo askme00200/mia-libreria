@@ -9,39 +9,25 @@ import os
 st.set_page_config(page_title="La Mia Libreria", layout="wide")
 st.markdown("""
     <style>
-    /* Sfondo crema caldo e testo principale cioccolato scuro */
     .stApp { background-color: #FDF8F2; color: #3A2220; }
-    
-    /* Titolo Principale Rosso Mattone Elegante */
     h1 { color: #8E3A2F !important; font-family: 'Georgia', serif; font-weight: bold; border-bottom: 3px solid #E67E22; padding-bottom: 12px; }
-    
-    /* Sottotitoli Verde Salvia Brillante */
     h3 { color: #2E7D32 !important; font-family: 'Georgia', serif; margin-top: 25px; font-weight: bold; }
-    
-    /* Etichette dei campi belle marcate */
     label { color: #4A2724 !important; font-weight: bold !important; font-size: 16px !important; }
-    
-    /* Caselle di testo bianche con bordo Arancione quando ci clicchi */
     .stTextInput input, .stTextArea textarea { background-color: #FFFFFF !important; color: #2C1A18 !important; border: 1.8px solid #D35400 !important; border-radius: 8px !important; }
     
-    /* PULSANTE DI SALVATAGGIO: Giallo Zafferano / Oro Energetico! */
-    div.stButton > button:first-child { background-color: #F39C12; color: #FFFFFF; border-radius: 10px; border: none; font-weight: bold; height: 48px; width: 100%; font-size: 18px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); transition: 0.3s; }
-    div.stButton > button:first-child:hover { background-color: #E67E22; color: #FFFFFF; box-shadow: 0 6px 12px rgba(0,0,0,0.2); transform: translateY(-2px); }
+    /* PULSANTE DI SALVATAGGIO: Giallo Zafferano */
+    div.stButton > button:first-child { background-color: #F39C12; color: #FFFFFF; border-radius: 10px; border: none; font-weight: bold; height: 48px; width: 100%; font-size: 18px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+    div.stButton > button:first-child:hover { background-color: #E67E22; color: #FFFFFF; }
     
-    /* Schede (Tabs) animate */
     .stTabs [data-baseweb="tab"] { color: #7F8C8D !important; font-size: 16px !important; font-weight: bold !important; }
     .stTabs [data-baseweb="tab"][aria-selected="true"] { color: #E67E22 !important; border-bottom-color: #E67E22 !important; border-bottom-width: 3px !important; }
     
-    /* TESSERA DEL LIBRO: Candita con bordo Arancione Vivace */
+    /* TESSERA DEL LIBRO */
     .libro-card { background-color: #FFFFFF; padding: 24px; border-radius: 14px; border-left: 7px solid #E67E22; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.06); }
     .libro-titolo { color: #1A0F0E; font-family: 'Georgia', serif; font-size: 24px; font-weight: bold; margin-bottom: 8px; }
     .libro-autore { color: #8E3A2F; font-size: 18px; font-style: italic; margin-bottom: 14px; font-weight: 600; }
     .libro-info { font-size: 15px; margin-bottom: 8px; color: #555555; }
-    
-    /* Badge dello Scaffale Arancione Zucca */
     .badge-scaffale { background-color: #E67E22; color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold; }
-    
-    /* Trama del libro protetta in un box rilassante */
     .libro-recensione { background-color: #F9F7F1; padding: 14px; border-radius: 8px; border-top: 1px dashed #BDC3C7; margin-top: 12px; font-size: 15px; color: #4F4F4F; line-height: 1.6; }
     
     .divisore { border-top: 2px dashed #BDC3C7; margin: 30px 0; }
@@ -58,7 +44,6 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Caricamento di sicurezza automatico
 if 'db_caricato' not in st.session_state:
     if os.path.exists('backup_libri.json'):
         try:
@@ -141,7 +126,7 @@ def scarica_dati_da_titolo(titolo, cognome):
 
 st.title("📚 La Mia Libreria Personale")
 
-# Menu di sicurezza laterale arancione
+# Menu laterale di esportazione
 cursor.execute("SELECT filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale FROM libri")
 libri_export = cursor.fetchall()
 if libri_export:
@@ -193,18 +178,35 @@ with tab2:
             st.success("🎉 Libro registrato con successo!")
             st.rerun()
 
-# --- SEZIONE RICERCA VIVACE ---
+# --- SEZIONE RICERCA COMPLETA E REINSERITA ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
 st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
-cerca_titolo = st.text_input("🔍 Digita il titolo che cerchi")
+
+col_c1, col_c2, col_c3 = st.columns(3)
+with col_c1:
+    cerca_titolo = st.text_input("🔍 Cerca per Titolo", key="c_tit")
+with col_c2:
+    cerca_cognome = st.text_input("👤 Cerca per Cognome Autore", key="c_cog")
+with col_c3:
+    cerca_scaffale = st.text_input("🗄️ Cerca per Scaffale", key="c_scaf")
+
+cerca_recensione = st.text_input("💬 Cerca parole nella Trama o Recensione", key="c_rec")
 
 cursor.execute("SELECT id, filename, titolo, cognome_autore, nome_autore, isbn, pagine, copertina, recensione, scaffale FROM libri ORDER BY id DESC")
 libri_tutti = cursor.fetchall()
 
 if libri_tutti:
+    contatore = 0
     for row in libri_tutti:
         db_id, filename, t, cog, nom, ib, pag, cop, rec, scaf = row
+        
+        # Filtri di ricerca incrociati
         if cerca_titolo and cerca_titolo.lower() not in t.lower(): continue
+        if cerca_cognome and cerca_cognome.lower() not in (cog if cog else "").lower(): continue
+        if cerca_scaffale and cerca_scaffale.lower() not in (scaf if scaf else "").lower(): continue
+        if cerca_recensione and cerca_recensione.lower() not in (rec if rec else "").lower(): continue
+        
+        contatore += 1
         col1, col2 = st.columns([1, 5])
         with col1: 
             st.image(cop if cop else COPERTINA_DEFAULT, width=115)
@@ -218,3 +220,16 @@ if libri_tutti:
                 <div class="libro-recensione">💬 <strong>Trama:</strong><br>{rec}</div>
             </div>
             """, unsafe_allow_html=True)
+            
+            # Possibilità di modificare al volo lo scaffale direttamente dalla ricerca
+            nuovo_scaf = st.text_input(f"Modifica Scaffale per '{t}'", value=scaf, key=f"edit_scaf_{db_id}")
+            if nuovo_scaf != scaf:
+                cursor.execute("UPDATE libri SET scaffale = ? WHERE id = ?", (nuovo_scaf, db_id))
+                conn.commit()
+                salva_backup_permanente()
+                st.rerun()
+                
+    if contatore == 0:
+        st.info("Nessun libro corrisponde ai filtri inseriti.")
+else:
+    st.info("Il catalogo è ancora vuoto. Inserisci il tuo primo libro qua sopra!")
