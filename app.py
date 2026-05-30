@@ -109,13 +109,14 @@ def cerca_dati_online(isbn_code):
     return None
 
 def scarica_dati_da_titolo(titolo, autore_ricerca):
-    termini_ricerca = titolo
-    if autore_ricerca:
-        termini_ricerca += f" {autore_ricerca}"
+    # Logica di ricerca super flessibile: cerca il titolo e, se c'è, aggiunge l'autore
+    stringa_pulita = titolo.strip()
+    if autore_ricerca and autore_ricerca.strip():
+        stringa_pulita += f" {autore_ricerca.strip()}"
         
-    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(termini_ricerca)}&maxResults=1&hl=it"
+    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(stringa_pulita)}&maxResults=1&hl=it"
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
         with urllib.request.urlopen(req, timeout=6) as response:
             data = json.loads(response.read().decode('utf-8'))
             if "items" in data:
@@ -123,7 +124,8 @@ def scarica_dati_da_titolo(titolo, autore_ricerca):
                 copertina = COPERTINA_DEFAULT
                 if "imageLinks" in v_info:
                     copertina = v_info["imageLinks"].get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
-                trama = v_info.get("description", "Nessuna trama disponibile.")
+                
+                trama = v_info.get("description", "Nessuna trama disponibile recuperata online.")
                 pagine = str(v_info.get("pageCount", "N.D."))
                 data_pub = v_info.get("publishedDate", "N.D.")
                 
@@ -206,7 +208,6 @@ with tab2:
     finestra_data = st.text_input("Data Pubblicazione", value=st.session_state['m_data_val'])
     finestra_recensione = st.text_area("Trama / Note", value=st.session_state['m_recensione_val'])
     
-    # Ora per salvare bastano solo il titolo e il cognome compilati (anche se trovati da internet)
     btn_salva = st.button("🌟 SALVA DEFINITIVAMENTE NELLO SCAFFALE")
     if btn_salva and finestra_titolo:
         cop_da_salvare = st.session_state['m_copertina_val'] if st.session_state['m_copertina_val'] else COPERTINA_DEFAULT
