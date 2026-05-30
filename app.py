@@ -6,7 +6,7 @@ import json
 import os
 import re
 
-# --- CONFIGURAZIONE GRAFICA VIVACE ---
+# --- CONFIGURAZIONE GRAFICA ---
 st.set_page_config(page_title="La Mia Libreria", layout="wide")
 st.markdown("""
     <style>
@@ -122,7 +122,7 @@ def cerca_da_titolo_online(titolo, autore_ricerca):
 
 st.title("📚 La Mia Libreria Personale")
 
-# Esportazione Excel nel menu laterale
+# Esportazione Excel di sicurezza
 cursor.execute("SELECT filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale FROM libri")
 libri_export = cursor.fetchall()
 if libri_export:
@@ -134,7 +134,7 @@ if libri_export:
 
 st.subheader("📥 Inserimento Nuovi Libri")
 
-# Inizializzazione della memoria dell'applicazione
+# Memoria di stato pulita e slegata da vincoli grafici
 if 'f_titolo' not in st.session_state: st.session_state['f_titolo'] = ""
 if 'f_cognome' not in st.session_state: st.session_state['f_cognome'] = ""
 if 'f_nome' not in st.session_state: st.session_state['f_nome'] = ""
@@ -152,21 +152,20 @@ with col_ric1:
     if st.button("CONTROLLA CODICE ISBN"):
         if isbn_raw:
             isbn_pulito = re.sub(r'[^0-9]', '', isbn_raw).strip()
-            with st.spinner("Ricerca codice..."):
-                ris_isbn = cerca_da_isbn_online(isbn_pulito)
-                if ris_isbn:
-                    st.session_state['f_titolo'] = ris_isbn[0]
-                    st.session_state['f_cognome'] = ris_isbn[1]
-                    st.session_state['f_nome'] = ris_isbn[2]
-                    st.session_state['f_pagine'] = ris_isbn[3]
-                    st.session_state['f_data'] = ris_isbn[4]
-                    st.session_state['f_copertina'] = ris_isbn[5]
-                    st.session_state['f_trama'] = ris_isbn[6]
-                    st.session_state['f_isbn'] = isbn_pulito
-                    st.success("Trovato da ISBN online!")
-                else:
-                    st.session_state['f_isbn'] = isbn_pulito
-                    st.error("I server ISBN non rispondono. Compila pure i dati qui sotto a mano!")
+            ris_isbn = cerca_da_isbn_online(isbn_pulito)
+            if ris_isbn:
+                st.session_state['f_titolo'] = ris_isbn[0]
+                st.session_state['f_cognome'] = ris_isbn[1]
+                st.session_state['f_nome'] = ris_isbn[2]
+                st.session_state['f_pagine'] = ris_isbn[3]
+                st.session_state['f_data'] = ris_isbn[4]
+                st.session_state['f_copertina'] = ris_isbn[5]
+                st.session_state['f_trama'] = ris_isbn[6]
+                st.session_state['f_isbn'] = isbn_pulito
+                st.success("Trovato da ISBN online!")
+            else:
+                st.session_state['f_isbn'] = isbn_pulito
+                st.error("I server ISBN non rispondono. Compila pure i dati qui sotto a mano!")
 
 with col_ric2:
     st.markdown("**🔍 OPZIONE B: Cerca per Titolo e Autore**")
@@ -174,52 +173,59 @@ with col_ric2:
     c_autore = st.text_input("Scrivi Autore da cercare (Opzionale):", key="input_autore_cerca")
     if st.button("CERCA DATI DA TITOLO"):
         if c_titolo:
-            with st.spinner("Ricerca su Google Books..."):
-                ris_tit = cerca_da_titolo_online(c_titolo, c_autore)
-                if ris_tit:
-                    st.session_state['f_titolo'] = ris_tit[0]
-                    st.session_state['f_cognome'] = ris_tit[1]
-                    st.session_state['f_nome'] = ris_tit[2]
-                    st.session_state['f_pagine'] = ris_tit[3]
-                    st.session_state['f_data'] = ris_tit[4]
-                    st.session_state['f_copertina'] = ris_tit[5]
-                    st.session_state['f_trama'] = ris_tit[6]
-                    st.session_state['f_isbn'] = "N.D."
-                    st.success("Trovato su Google Books!")
-                else:
-                    # SISTEMA PARACADUTE: Se internet fallisce, sposta subito quello che hai digitato in basso!
-                    st.session_state['f_titolo'] = c_titolo
-                    parti_aut = c_autore.strip().split() if c_autore else []
-                    st.session_state['f_cognome'] = parti_aut[-1] if len(parti_aut) > 1 else (c_autore if c_autore else "")
-                    st.session_state['f_nome'] = " ".join(parti_aut[:-1]) if len(parti_aut) > 1 else ""
-                    st.session_state['f_pagine'] = "N.D."
-                    st.session_state['f_data'] = "N.D."
-                    st.session_state['f_trama'] = ""
-                    st.session_state['f_copertina'] = COPERTINA_DEFAULT
-                    st.session_state['f_isbn'] = "N.D."
-                    st.warning("Google è occupato, ma ho già compilato Titolo e Autore in basso per farti risparmiare tempo!")
+            ris_tit = cerca_da_titolo_online(c_titolo, c_autore)
+            if ris_tit:
+                st.session_state['f_titolo'] = ris_tit[0]
+                st.session_state['f_cognome'] = ris_tit[1]
+                st.session_state['f_nome'] = ris_tit[2]
+                st.session_state['f_pagine'] = ris_tit[3]
+                st.session_state['f_data'] = ris_tit[4]
+                st.session_state['f_copertina'] = ris_tit[5]
+                st.session_state['f_trama'] = ris_tit[6]
+                st.session_state['f_isbn'] = "N.D."
+                st.success("Trovato su Google Books!")
+            else:
+                # Sistema di copia immediata se internet fallisce
+                st.session_state['f_titolo'] = c_titolo
+                parti_aut = c_autore.strip().split() if c_autore else []
+                st.session_state['f_cognome'] = parti_aut[-1] if len(parti_aut) > 1 else (c_autore if c_autore else "")
+                st.session_state['f_nome'] = " ".join(parti_aut[:-1]) if len(parti_aut) > 1 else ""
+                st.session_state['f_pagine'] = "N.D."
+                st.session_state['f_data'] = "N.D."
+                st.session_state['f_trama'] = ""
+                st.session_state['f_copertina'] = COPERTINA_DEFAULT
+                st.session_state['f_isbn'] = "N.D."
+                st.warning("Google è occupato, ho copiato quello che hai scritto in basso così puoi salvarlo subito!")
 
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
-st.markdown("### ✍️ SCHEDA DEL LIBRO (Finestre sempre libere, modificabili e reattive)")
+st.markdown("### ✍️ SCHEDA DEL LIBRO (Finestre libere e sempre editabili)")
 
-# FINESTRE REATTIVE: se scrivi dentro cambiano la memoria all'istante (risolve i blocchi su iPhone)
-finestra_titolo = st.text_input("Titolo del Libro", value=st.session_state['f_titolo'], key="reale_titolo", on_change=lambda: st.session_state.update({'f_titolo': st.session_state.reale_titolo}))
-finestra_cognome = st.text_input("Cognome Autore", value=st.session_state['f_cognome'], key="reale_cognome", on_change=lambda: st.session_state.update({'f_cognome': st.session_state.reale_cognome}))
-finestra_nome = st.text_input("Nome Autore", value=st.session_state['f_nome'], key="reale_nome", on_change=lambda: st.session_state.update({'f_nome': st.session_state.reale_nome}))
-finestra_pagine = st.text_input("Numero Pagine", value=st.session_state['f_pagine'], key="reale_pagine", on_change=lambda: st.session_state.update({'f_pagine': st.session_state.reale_pagine}))
-finestra_data = st.text_input("Data Pubblicazione", value=st.session_state['f_data'], key="reale_data", on_change=lambda: st.session_state.update({'f_data': st.session_state.reale_data}))
-finestra_recensione = st.text_area("Trama / Note Personali", value=st.session_state['f_trama'], key="reale_trama", height=150, on_change=lambda: st.session_state.update({'f_trama': st.session_state.reale_trama}))
+# FINESTRE STANDARD TOTALMENTE LIBERE (Nessun blocco o funzione on_change nascosta)
+finestra_titolo = st.text_input("Titolo del Libro", value=st.session_state['f_titolo'], key="reale_titolo")
+finestra_cognome = st.text_input("Cognome Autore", value=st.session_state['f_cognome'], key="reale_cognome")
+finestra_nome = st.text_input("Nome Autore", value=st.session_state['f_nome'], key="reale_nome")
+finestra_pagine = st.text_input("Numero Pagine", value=st.session_state['f_pagine'], key="reale_pagine")
+finestra_data = st.text_input("Data Pubblicazione", value=st.session_state['f_data'], key="reale_data")
+finestra_recensione = st.text_area("Trama / Note Personali", value=st.session_state['f_trama'], key="reale_trama", height=150)
 
 if st.button("🌟 SALVA DEFINITIVAMENTE NELLO SCAFFALE"):
-    if finestra_titolo.strip() and finestra_cognome.strip():
+    # Leggiamo i dati esattamente da ciò che vedi scritto a schermo nelle finestre
+    t_salva = finestra_titolo.strip()
+    c_salva = finestra_cognome.strip()
+    n_salva = finestra_nome.strip()
+    p_salva = finestra_pagine.strip()
+    d_salva = finestra_data.strip()
+    r_salva = finestra_recensione.strip()
+    
+    if t_salva and c_salva:
         cursor.execute('''
             INSERT INTO libri (filename, titolo, cognome_autore, nome_autore, isbn, pagine, data_pub, copertina, recensione, scaffale)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', ("Catalogo", finestra_titolo.strip(), finestra_cognome.strip(), finestra_nome.strip(), st.session_state['f_isbn'], finestra_pagine, finestra_data, st.session_state['f_copertina'], finestra_recensione, "Non assegnato"))
+        ''', ("Catalogo", t_salva, c_salva, n_salva, st.session_state['f_isbn'], p_salva, d_salva, st.session_state['f_copertina'], r_salva, "Non assegnato"))
         conn.commit()
         salva_backup_permanente()
         
-        # Reset totale dei campi per il libro successivo
+        # Svuotamento totale per il prossimo inserimento
         st.session_state['f_titolo'] = ""
         st.session_state['f_cognome'] = ""
         st.session_state['f_nome'] = ""
@@ -230,12 +236,12 @@ if st.button("🌟 SALVA DEFINITIVAMENTE NELLO SCAFFALE"):
         st.session_state['f_isbn'] = "N.D."
         
         st.balloons()
-        st.success("🎉 Fantastico! Libro salvato nell'archivio.")
+        st.success("🎉 Libro salvato correttamente!")
         st.rerun()
     else:
-        st.error("Inserisci almeno il Titolo e il Cognome dell'Autore per salvare!")
+        st.error("Inserisci almeno Titolo e Cognome Autore prima di premere Salva!")
 
-# --- SEZIONE FILTRI E RICERCA ---
+# --- SEZIONE ARCHIVIO ---
 st.markdown('<div class="divisore"></div>', unsafe_allow_html=True)
 st.subheader("🔍 Filtra e Cerca nei tuoi Scaffali")
 
@@ -285,6 +291,6 @@ if libri_tutti:
                 st.rerun()
                 
     if contatore == 0:
-        st.info("Nessun libro trovato con questi filtri.")
+        st.info("Nessun libro trovato.")
 else:
     st.info("Il catalogo è vuoto.")
