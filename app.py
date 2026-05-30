@@ -184,3 +184,4 @@ with tab2:
                 risultato = scarica_dati_da_titolo(cerca_chiave_titolo, cerca_chiave_autore)
                 if risultato:
                     t_f, c_f, n_f, p_f
+                    
