@@ -4,63 +4,47 @@ import json
 import os
 
 st.set_page_config(page_title="La Mia Libreria", layout="wide")
-DB_FILE = 'catalogo_nuovo.db'
+st.markdown("""
+    <style>
+    .stApp { background-color: #FDF8F2; color: #3A2220; }
+    h1 { color: #8E3A2F !important; font-family: 'Georgia', serif; font-weight: bold; border-bottom: 3px solid #E67E22; padding-bottom: 12px; }
+    .libro-card { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border-left: 6px solid #E67E22; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    </style>
+""", unsafe_allow_html=True)
 
-# Connessione sicura
-conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-cursor = conn.cursor()
+# Database in memoria per velocità
+conn = sqlite3.connect(':memory:', check_same_thread=False)
+c = conn.cursor()
+c.execute('CREATE TABLE libri (titolo TEXT, autore TEXT, trama TEXT)')
 
-# Creazione tabella garantita
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS libri (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        titolo TEXT, 
-        cognome TEXT, 
-        nome TEXT, 
-        isbn TEXT, 
-        pagine TEXT, 
-        recensione TEXT, 
-        scaffale TEXT
-    )
-''')
-conn.commit()
+# Caricamento dal tuo backup (che è al sicuro su GitHub)
+if os.path.exists('backup_libri.json'):
+    with open('backup_libri.json', 'r', encoding='utf-8') as f:
+        try:
+            libri = json.load(f)
+            for l in libri:
+                c.execute('INSERT INTO libri VALUES (?,?,?)', (l.get('titolo'), l.get('autore'), l.get('trama')))
+        except: pass
 
-def salva_backup():
-    cursor.execute("SELECT * FROM libri")
-    rows = cursor.fetchall()
-    libri = [{'titolo': r[1], 'cognome': r[2], 'nome': r[3], 'isbn': r[4], 'pagine': r[5], 'recensione': r[6], 'scaffale': r[7]} for r in rows]
-    with open('backup_libri.json', 'w', encoding='utf-8') as f:
-        json.dump(libri, f, ensure_ascii=False, indent=4)
+st.title("📚 La Mia Libreria Personale")
 
-st.title("📚 La Mia Libreria")
-
-# Input
-titolo = st.text_input("Titolo")
-cognome = st.text_input("Cognome Autore")
-nome = st.text_input("Nome Autore")
-isbn = st.text_input("ISBN")
-pagine = st.text_input("Pagine")
-recensione = st.text_area("Trama / Note")
-
-if st.button("💾 SALVA LIBRO"):
-    if titolo and cognome:
-        cursor.execute("INSERT INTO libri (titolo, cognome, nome, isbn, pagine, recensione, scaffale) VALUES (?,?,?,?,?,?,?)",
-                       (titolo, cognome, nome, isbn, pagine, recensione, "Nessuno"))
-        conn.commit()
-        salva_backup()
-        st.success("Salvato!")
+# Inserimento
+with st.expander("📥 Aggiungi nuovo libro"):
+    t = st.text_input("Titolo")
+    a = st.text_input("Autore")
+    tr = st.text_area("Trama")
+    if st.button("Salva"):
+        c.execute('INSERT INTO libri VALUES (?,?,?)', (t, a, tr))
+        # Salva nel backup permanente
+        c.execute('SELECT * FROM libri')
+        nuova_lista = [{'titolo': r[0], 'autore': r[1], 'trama': r[2]} for r in c.fetchall()]
+        with open('backup_libri.json', 'w', encoding='utf-8') as f:
+            json.dump(nuova_lista, f, ensure_ascii=False, indent=4)
         st.rerun()
-    else:
-        st.error("Titolo e Cognome obbligatori!")
 
-st.divider()
-st.subheader("🔍 Archivio")
-cerca = st.text_input("Cerca nel catalogo")
-
-# Query protetta
-try:
-    cursor.execute("SELECT * FROM libri WHERE titolo LIKE ? OR cognome LIKE ?", (f'%{cerca}%', f'%{cerca}%'))
-    for r in cursor.fetchall():
-        st.write(f"**{r[1]}** - {r[2]} {r[3]}")
-except:
-    st.info("Archivio vuoto o in fase di creazione.")
+# Ricerca
+st.subheader("🔍 Cerca nei tuoi libri")
+q = st.text_input("Cosa cerchi?")
+c.execute('SELECT * FROM libri WHERE titolo LIKE ? OR autore LIKE ?', (f'%{q}%', f'%{q}%'))
+for row in c.fetchall():
+    st.markdown(f'<div class="libro-card"><strong>{row[0]}</strong><br><em>{row[1]}</em><br>{row[2]}</div>', unsafe_allow_html=True)
