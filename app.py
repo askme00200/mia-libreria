@@ -108,33 +108,36 @@ def cerca_dati_online(isbn_code):
         pass
     return None
 
-def scarica_dati_da_titolo(titolo, autore_ricerca):
-    stringa_pulita = titolo.strip()
+def scarica_dati_da_titolo_alternativo(titolo, autore_ricerca):
+    # NUOVO MOTORE DI RICERCA BASATO SU OPEN LIBRARY (EVITA I BLOCCHI DI GOOGLE)
+    query = titolo.strip()
     if autore_ricerca and autore_ricerca.strip():
-        stringa_pulita += f" {autore_ricerca.strip()}"
+        query += f" {autore_ricerca.strip()}"
         
-    url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(stringa_pulita)}&maxResults=1&hl=it"
+    url = f"https://openlibrary.org/search.json?q={urllib.parse.quote(query)}&limit=1"
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req, timeout=6) as response:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=8) as response:
             data = json.loads(response.read().decode('utf-8'))
-            if "items" in data:
-                v_info = data["items"][0]["volumeInfo"]
-                copertina = COPERTINA_DEFAULT
-                if "imageLinks" in v_info:
-                    copertina = v_info["imageLinks"].get("thumbnail", COPERTINA_DEFAULT).replace("http://", "https://")
+            if "docs" in data and len(data["docs"]) > 0:
+                doc = data["docs"][0]
                 
-                trama = v_info.get("description", "Nessuna trama disponibile recuperata online.")
-                pagine = str(v_info.get("pageCount", "N.D."))
-                data_pub = v_info.get("publishedDate", "N.D.")
+                tit_t = doc.get("title", titolo)
+                pagine = str(doc.get("number_of_pages_median", doc.get("number_of_pages", "N.D.")))
+                data_pub = str(doc.get("first_publish_year", "N.D."))
                 
-                autori = v_info.get("authors", ["Sconosciuto"])
+                autori = doc.get("author_name", ["Sconosciuto"])
                 autore_trovato = autori[0]
                 parti = autore_trovato.strip().split()
                 cog_t = parti[-1] if len(parti) > 1 else autore_trovato
                 nom_t = " ".join(parti[:-1]) if len(parti) > 1 else ""
                 
-                tit_t = v_info.get("title", titolo)
+                copertina = COPERTINA_DEFAULT
+                if "cover_i" in doc:
+                    copertina = f"https://covers.openlibrary.org/b/id/{doc['cover_i']}-L.jpg"
+                
+                # Tenta di recuperare una descrizione breve, altrimenti mette un testo standard pulito
+                trama = "Recuperato automaticamente tramite Open Library."
                 return tit_t, cog_t, nom_t, pagine, data_pub, copertina, trama
     except:
         pass
@@ -185,7 +188,7 @@ with tab2:
     if st.button("🔍 CERCA DATI ONLINE"):
         if cerca_chiave_titolo:
             with st.spinner("Riempimento finestre in corso..."):
-                risultato = scarica_dati_da_titolo(cerca_chiave_titolo, cerca_chiave_autore)
+                risultato = scarica_dati_da_titolo_alternativo(cerca_chiave_titolo, cerca_chiave_autore)
                 if risultato:
                     t_f, c_f, n_f, p_f, d_f, cop_f, rec_f = risultato
                     st.session_state['m_titolo_val'] = t_f
@@ -195,7 +198,7 @@ with tab2:
                     st.session_state['m_data_val'] = d_f
                     st.session_state['m_copertina_val'] = cop_f
                     st.session_state['m_recensione_val'] = rec_f
-                    st.success("Dati trovati con successo!")
+                    st.success("Dati trovati con successo da Open Library!")
                 else:
                     st.session_state['m_titolo_val'] = cerca_chiave_titolo.strip()
                     st.session_state['m_cognome_val'] = cerca_chiave_autore.strip() if cerca_chiave_autore else ""
@@ -204,7 +207,7 @@ with tab2:
                     st.session_state['m_data_val'] = ""
                     st.session_state['m_copertina_val'] = ""
                     st.session_state['m_recensione_val'] = ""
-                    st.warning("⚠️ Google Books non risponde. Ho inserito il titolo nella finestra sotto, compila il resto a mano!")
+                    st.warning("⚠️ Anche il secondo database è occupato. Ho inserito solo il titolo in basso.")
 
     st.markdown("---")
     finestra_titolo = st.text_input("Titolo Libro Trovato", value=st.session_state['m_titolo_val'])
